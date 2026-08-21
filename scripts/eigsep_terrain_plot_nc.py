@@ -10,15 +10,20 @@ import numpy as np
 import matplotlib.pylab as plt
 from eigsep_terrain.marjum_dem import MarjumDEM as DEM
 from eigsep_terrain.img import HorizonImage, PositionSolver, PRM_ORDER
+from eigsep_terrain.img_defaults import load_defaults
 from eigsep_data.plot import terrain_plot
 import arviz
 import corner
 
+# Generic, arbitrary-image-count defaults loaded from defaults.json (same
+# file used by tune_image.py / fit_image.py / plot_image_fit.py). Edit
+# defaults.json, not this script, when a starting value changes.
+DEFAULT_IMG_GLOB, DEFAULT_CACHE_FILE, DEFAULT_META, DEFAULT_PRMS_U_BY_KEY, IMG_KEYS = \
+    load_defaults()
+
 ap = argparse.ArgumentParser()
-ap.add_argument("--cache-file", default="marjum_dem.npz")
-ap.add_argument(
-    "--img-glob", default="/home/aparsons/Downloads/IMG_08*.jpg"
-)
+ap.add_argument("--cache-file", default=DEFAULT_CACHE_FILE)
+ap.add_argument("--img-glob", default=DEFAULT_IMG_GLOB)
 ap.add_argument("nc_files", nargs="*")
 args = ap.parse_args()
 
@@ -26,22 +31,8 @@ np.random.seed(42)
 
 dem = DEM(cache_file=args.cache_file)
 
-meta = {
-    '0817': {'ant_px': (2*1366, 2*1221)},
-    '0833': {'ant_px': (1606, 2700)},
-    #'0834': {'ant_px': (1622, 2251)},
-    '0860': {'ant_px': (2924, 1945)},
-}
+meta = {k: dict(v) for k, v in DEFAULT_META.items()}
 BOX_SIZE = 0.3  # m
-
-# Default parameter values (e, n, u, th, ph, ti, f) per camera,
-# followed by (ant_e, ant_n, ant_u).
-DEFAULT_PRMS = (
-    1734.11, 2069.00, 1760.97, 1.4706, 3.6932, -0.0493,  9830.11,
-    1611.31, 1849.00, 1659.78, 1.2053, 1.2414, -0.0244,  5081.08,
-    1541.90, 1998.96, 1765.06, 1.5412, 0.6147,  0.1585,  2328.64,
-    1651.83, 2024.17, 1781.46,
-)
 
 files = sorted(glob.glob(args.img_glob))
 print(files)
@@ -49,16 +40,32 @@ imgs = [HorizonImage(f, meta, px_smooth=150, px_dist=30) for f in files]
 imgs = [img for img in imgs if img.key in meta]
 fit_imgs, static_imgs = imgs, []
 n_rays = 4000
+img_keys = [img.key for img in fit_imgs]
 
-# Initialise images and dem markers from DEFAULT_PRMS
-default_prms = np.asarray(DEFAULT_PRMS)
+# Default parameter values (e, n, u, th, ph, ti, f) per camera, in fit_imgs
+# order, from defaults.json's per-key prms_u — followed by a dummy
+# (ant_e, ant_n, ant_u). defaults.json has no tracked platform/antenna
+# position, so the antenna is seeded at the mean camera E/N, 1m above
+# ground, purely so PositionSolver's u<->log_h conversion has a valid
+# DEM location.
+default_prms = np.concatenate(
+    [np.asarray(DEFAULT_PRMS_U_BY_KEY[k], dtype=np.float32) for k in img_keys]
+    + [np.zeros(3, dtype=np.float32)]  # placeholder, filled in below
+)
+
+# Initialise images and dem markers from default_prms
 for i, img in enumerate(fit_imgs):
     base = i * len(PRM_ORDER)
     img.set_prms(default_prms[base:base + len(PRM_ORDER)])
     dem[img.key] = np.asarray(
         default_prms[base:base + 3], dtype=np.float32
     )
-ant_pos_prior = default_prms[-3:].astype(np.float32)
+_e0 = float(np.mean([img.prms['e'] for img in fit_imgs]))
+_n0 = float(np.mean([img.prms['n'] for img in fit_imgs]))
+ant_pos_prior = np.array(
+    [_e0, _n0, float(dem.interp_alt(_e0, _n0)) + 1.0], dtype=np.float32
+)
+default_prms[-3:] = ant_pos_prior
 dem['platform'] = ant_pos_prior
 
 ps = PositionSolver(
@@ -78,15 +85,12 @@ if hasattr(trc, 'sample_stats') and hasattr(trc.sample_stats, 'accepted'):
         print(f"chain {c}: acceptance fraction = {frac:.3f}")
     print(f"overall acceptance fraction = {acc.mean():.3f}")
 
+# Built dynamically from whichever images were actually loaded (previously
+# hardcoded to the fixed 0817/0833/0860 3-camera set).
 ordered_names = [
-    "0817_e", "0817_n", "0817_log_h", "0817_th", "0817_ph", "0817_ti",
-    "0817_f",
-    "0833_e", "0833_n", "0833_log_h", "0833_th", "0833_ph", "0833_ti",
-    "0833_f",
-    "0860_e", "0860_n", "0860_log_h", "0860_th", "0860_ph", "0860_ti",
-    "0860_f",
-    "ant_e", "ant_n", "ant_log_h",
-]
+    f"{key}_{('log_h' if p == 'u' else p)}"
+    for key in img_keys for p in PRM_ORDER
+] + ["ant_e", "ant_n", "ant_log_h"]
 
 # Update solver and dem markers from trace posterior means (log_h -> u)
 trace_means = np.array(

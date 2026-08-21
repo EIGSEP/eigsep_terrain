@@ -29,6 +29,12 @@ from eigsep_terrain.img import (
     HorizonImage, PositionSolver, PRM_ORDER, pixels_to_rays, dtype_r
 )
 from eigsep_terrain.utils import rot_m, mask_near_horizon
+from eigsep_terrain.img_defaults import load_defaults
+
+# Only cache_file is shared with the real-image scripts (defaults.json's
+# per-image meta/prms don't apply here — toy_problem.py generates its own
+# synthetic camera placements from scratch).
+_, DEFAULT_CACHE_FILE, _, _, _ = load_defaults()
 
 BOX_SIZE = 0.3  # m
 IMG_W = 640     # synthetic image width  (pixels) — keep small for speed
@@ -337,7 +343,7 @@ def build_true_prms_vector(cameras, angles, ant_pos, focal=FOCAL):
 
 def build_argparser():
     ap = argparse.ArgumentParser()
-    ap.add_argument("--cache-file", default="marjum_dem.npz")
+    ap.add_argument("--cache-file", default=DEFAULT_CACHE_FILE)
     ap.add_argument("--stage", default="all",
                     help="1|2|3|4|all  (default: all)")
     ap.add_argument("--seed",  type=int, default=7)

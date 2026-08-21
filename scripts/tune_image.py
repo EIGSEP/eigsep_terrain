@@ -194,7 +194,7 @@ def main(argv=None):
         norm = np.hypot(dE, dN)
         if norm > 1e-6:
             dE, dN = dE / norm, dN / norm
-        arrow_len = 0.15 * (SLIDER_RANGES["e"][1] - SLIDER_RANGES["e"][0])
+        arrow_len = 0.3 * (SLIDER_RANGES["e"][1] - SLIDER_RANGES["e"][0])
         if arrow_holder["ann"] is not None:
             arrow_holder["ann"].remove()
         arrow_holder["ann"] = ax_terrain.annotate(

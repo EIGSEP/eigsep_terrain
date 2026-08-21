@@ -22,56 +22,26 @@ from pytensor.compile.ops import as_op
 
 from eigsep_terrain.marjum_dem import MarjumDEM as DEM
 from eigsep_terrain.img import HorizonImage, PositionSolver, PRM_ORDER, dtype_r
+from eigsep_terrain.img_defaults import load_defaults
 
 BOX_SIZE = 0.3  # m
 
-# Fallback (used only if --meta-file is not given) — 2026 deployment,
-# matching tune_image.py / fit_image.py / plot_image_fit.py.
-DEFAULT_META = {
-    '2209' : {"ant_px": (2146, 232)},
-    '2210' : {"ant_px": (1362, 137)},
-    '2211' : {"ant_px": (1785, 505)},
-    '2213' : {"ant_px": (1117, 549)},
-    '2214' : {"ant_px": (1206, 300)},
-    '2215' : {"ant_px": (2469, 1411)},
-    '2216' : {"ant_px": (2606, 719)},
-    '2217' : {"ant_px": (2228, 912)},
-    '2218' : {"ant_px": (2711, 919)},
-    '2219' : {"ant_px": (1626, 1082)},
-    '2220' : {"ant_px": (1580, 166)},
-    '2221' : {"ant_px": (2278, 790)},
-    '2222' : {"ant_px": (1020, 720)},
-    '2223' : {"ant_px": (1439, 758)},
-    '2224' : {"ant_px": (799, 744)},
-    '2225' : {"ant_px": (1959, 1116)},
-    '2226' : {"ant_px": (3207, 364)},
-    '2227' : {"ant_px": (2719, 930)},
-    '2228' : {"ant_px": (1693, 786)},
-    '2229' : {"ant_px": (2759, 706)},
-    '2230' : {"ant_px": (3295, 744)},
-    '2231' : {"ant_px": (3476, 338)},
-    '2232' : {"ant_px": (2318, 454)},
-    '2233' : {"ant_px": (3092, 982)},
-    '2234' : {"ant_px": (2405, 1161)},
-    '2235' : {"ant_px": (2234, 464)},
-    '2236' : {"ant_px": (2562, 1208)},
-    '2237' : {"ant_px": (1935, 646)},
-    '2238' : {"ant_px": (2131, 1032)},
-    '2239' : {"ant_px": (2436, 271)},
-    '2241' : {"ant_px": (1652, 877)},
-    '2242' : {"ant_px": (1917, 483)},
-    '2243' : {"ant_px": (2087, 528)},
-    '2245' : {"ant_px": (2294, 902)},
-}
+# Fallback (used only if --meta-file is not given) — loaded from
+# defaults.json so this stays in sync with tune_image.py / fit_image.py /
+# plot_image_fit.py. Edit defaults.json, not this script, when a starting
+# value changes.
+DEFAULT_IMG_GLOB, DEFAULT_CACHE_FILE, DEFAULT_META, DEFAULT_PRMS_U_BY_KEY, IMG_KEYS = \
+    load_defaults()
 
-# Per-image (e, n, u, th, ph, ti, f), same starting values as
-# tune_image.py's DEFAULT_PRMS_U_BY_KEY, flattened in DEFAULT_META key
-# order, with a placeholder platform (antenna) prior appended as the
-# final 3 values.
-DEFAULT_PRMS = tuple(
-    v for k in DEFAULT_META
-    for v in (1600.0, 2000.0, 1600.0, 1.5, 1.0, 0.0, 5000.0)
-) + (1600.0, 2000.0, 1600.0)  # platform e, n, u placeholder
+
+def _dummy_platform(img_keys, dem):
+    """defaults.json has no tracked platform/antenna position. Build a
+    dummy prior at the mean camera E/N, 1m above ground, so
+    PositionSolver's u<->log_h conversion has a valid DEM location."""
+    es = [DEFAULT_PRMS_U_BY_KEY[k][0] for k in img_keys]
+    ns = [DEFAULT_PRMS_U_BY_KEY[k][1] for k in img_keys]
+    e0, n0 = float(np.mean(es)), float(np.mean(ns))
+    return np.array([e0, n0, float(dem.interp_alt(e0, n0)) + 1.0], dtype=dtype_r)
 
 
 def load_meta_file(path: str):
@@ -135,9 +105,8 @@ def _apply_prms_to_dem_and_meta(
 
 def build_argparser() -> argparse.ArgumentParser:
     ap = argparse.ArgumentParser()
-    ap.add_argument("--cache-file", default="marjum_dem.npz")
-    ap.add_argument("--img-glob",
-                    default="/Users/komalkaur/Desktop/eigsep_stuff/eigsep_terrain/2026_imgs/*.jpg")
+    ap.add_argument("--cache-file", default=DEFAULT_CACHE_FILE)
+    ap.add_argument("--img-glob", default=DEFAULT_IMG_GLOB)
     ap.add_argument("--seed", type=int, default=None,
                     help="Defaults to random [0,999]")
     ap.add_argument("--meta-file", default=None,
@@ -233,7 +202,11 @@ def main(argv=None) -> int:
     else:
         meta = {k: dict(v) for k, v in DEFAULT_META.items()}
         meta_img_keys = list(DEFAULT_META.keys())
-        prms_u = np.asarray(DEFAULT_PRMS, dtype=dtype_r)
+        cam_prms = np.concatenate(
+            [np.asarray(DEFAULT_PRMS_U_BY_KEY[k], dtype=dtype_r) for k in meta_img_keys]
+        )
+        platform = _dummy_platform(meta_img_keys, dem)
+        prms_u = np.concatenate([cam_prms, platform]).astype(dtype_r)
 
     imgs = [HorizonImage(f, meta, px_smooth=args.px_smooth, px_dist=args.px_dist)
             for f in files]

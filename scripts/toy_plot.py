@@ -28,6 +28,9 @@ import arviz as az
 
 from eigsep_terrain.marjum_dem import MarjumDEM as DEM
 from eigsep_terrain.img import PRM_ORDER, dtype_r
+from eigsep_terrain.img_defaults import load_defaults
+
+_, DEFAULT_CACHE_FILE, _, _, _ = load_defaults()
 
 
 # ── terrain helper (as provided) ─────────────────────────────────────────────
@@ -267,7 +270,7 @@ def fig_marginals(cameras, ant_pos, angles, trace, outdir='.'):
 
 def build_argparser():
     ap = argparse.ArgumentParser()
-    ap.add_argument("--cache-file", default="marjum_dem.npz")
+    ap.add_argument("--cache-file", default=DEFAULT_CACHE_FILE)
     ap.add_argument("--trace",      default="toy_trace.nc")
     ap.add_argument("--prms-json",  default="toy_true_prms.json",
                     help="JSON with true params written by toy_problem.py")

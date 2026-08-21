@@ -33,21 +33,41 @@ import matplotlib.pyplot as plt
 
 from eigsep_terrain.marjum_dem import MarjumDEM as DEM
 from eigsep_terrain.img import HorizonImage, PositionSolver, PRM_ORDER, dtype_r
+from eigsep_terrain.img_defaults import load_defaults
 
 BOX_SIZE = 0.3
 
-DEFAULT_META = {
-    "0817": {"ant_px": (2 * 1366, 2 * 1221)},
-    "0833": {"ant_px": (1606, 2700)},
-    "0860": {"ant_px": (2924, 1945)},
-}
+# Generic, arbitrary-image-count defaults loaded from defaults.json (same file
+# used by tune_image.py / fit_image.py / plot_image_fit.py). Edit
+# defaults.json, not this script, when a starting value changes.
+DEFAULT_IMG_GLOB, DEFAULT_CACHE_FILE, DEFAULT_META, DEFAULT_PRMS_U_BY_KEY, IMG_KEYS = \
+    load_defaults()
 
-DEFAULT_PRMS = (
-    1734.11, 2069.00, 1760.97, 1.4706, 3.6932, -0.0493, 9830.11,
-    1611.31, 1849.00, 1659.78, 1.2053, 1.2414, -0.0244, 5081.08,
-    1541.90, 1998.96, 1765.06, 1.5412, 0.6147, 0.1585, 2328.64,
-    1651.83, 2024.17, 1781.46,
-)
+
+def _build_prms_u(img_keys, dem, set_cam_height=False, cam_height=1.6):
+    """Concatenate per-key (e, n, u, th, ph, ti, f) starting params, in
+    img_keys order, from DEFAULT_PRMS_U_BY_KEY. Optionally override each
+    image's u to dem.interp_alt(e, n) + cam_height."""
+    chunks = []
+    for key in img_keys:
+        p = np.asarray(DEFAULT_PRMS_U_BY_KEY[key], dtype=dtype_r)
+        if set_cam_height:
+            p = p.copy()
+            p[2] = float(dem.interp_alt(p[0], p[1])) + cam_height
+        chunks.append(p)
+    return np.concatenate(chunks).astype(dtype_r)
+
+
+def _dummy_ant_pos_prior(prms_u, dem):
+    """Antenna position isn't tracked in defaults.json (2026 dataset fits
+    images independently, antenna term disabled). Build a dummy prior at
+    the mean camera E/N, 1m above ground, just so PositionSolver's
+    u<->log_h conversion has a valid DEM location."""
+    n_imgs = prms_u.size // len(PRM_ORDER)
+    es = prms_u[0::len(PRM_ORDER)][:n_imgs]
+    ns = prms_u[1::len(PRM_ORDER)][:n_imgs]
+    e0, n0 = float(es.mean()), float(ns.mean())
+    return np.array([e0, n0, float(dem.interp_alt(e0, n0)) + 1.0], dtype=dtype_r)
 
 
 
@@ -171,9 +191,8 @@ def build_argparser():
                     help="Which parameter estimate to use. Auto-detected if not set: "
                          "map-file only -> map; trace-file only -> post_mean; "
                          "both -> map unless overridden.")
-    ap.add_argument("--cache-file", default="marjum_dem.npz")
-    ap.add_argument("--img-glob",
-                    default="/Users/komalkaur/Desktop/eigsep_stuff/hrzn_mapping/imgs/IMG*.jpg")
+    ap.add_argument("--cache-file", default=DEFAULT_CACHE_FILE)
+    ap.add_argument("--img-glob", default=DEFAULT_IMG_GLOB)
     ap.add_argument("--px-dist",    type=int,   default=30)
     ap.add_argument("--px-smooth",  type=int,   default=150)
     ap.add_argument("--n-rays",     type=int,   default=4000,
@@ -184,12 +203,6 @@ def build_argparser():
     ap.add_argument("--n-prior-samples", type=int, default=50,
                     help="Random prior draws for baseline comparison")
     ap.add_argument("--seed",       type=int,   default=42)
-    ap.add_argument("--img0-e", type=float, default=1734.11)
-    ap.add_argument("--img0-n", type=float, default=2069.00)
-    ap.add_argument("--img1-e", type=float, default=1611.31)
-    ap.add_argument("--img1-n", type=float, default=1849.00)
-    ap.add_argument("--img2-e", type=float, default=1541.90)
-    ap.add_argument("--img2-n", type=float, default=1998.96)
     ap.add_argument("--set-cam-height", action="store_true", default=True)
     ap.add_argument("--cam-height", type=float, default=1.6)
     ap.add_argument("--pos-err",     type=float, default=10.0)
@@ -223,17 +236,12 @@ def main(argv=None):
     imgs  = [img for img in imgs if img.key in meta]
     img_keys = [img.key for img in imgs]
 
-    prms_u = np.asarray(DEFAULT_PRMS, dtype=dtype_r)
-    prms_u[0]  = args.img0_e;  prms_u[1]  = args.img0_n
-    prms_u[7]  = args.img1_e;  prms_u[8]  = args.img1_n
-    prms_u[14] = args.img2_e;  prms_u[15] = args.img2_n
+    prms_u = _build_prms_u(img_keys, dem, set_cam_height=args.set_cam_height,
+                           cam_height=args.cam_height)
+    ant_pos_prior = _dummy_ant_pos_prior(prms_u, dem)
 
-    if args.set_cam_height:
-        prms_u[2]  = float(dem.interp_alt(args.img0_e, args.img0_n)) + args.cam_height
-        prms_u[9]  = float(dem.interp_alt(args.img1_e, args.img1_n)) + args.cam_height
-        prms_u[16] = float(dem.interp_alt(args.img2_e, args.img2_n)) + args.cam_height
-
-    _apply_prms(dem, meta, img_keys, prms_u, len(PRM_ORDER))
+    _apply_prms(dem, meta, img_keys, np.concatenate([prms_u, ant_pos_prior]),
+               len(PRM_ORDER))
 
     ps = PositionSolver(dem["platform"], imgs, [], args.n_rays, dem, box_size=BOX_SIZE)
     prms_h = ps.prms_u_to_h(prms_u)

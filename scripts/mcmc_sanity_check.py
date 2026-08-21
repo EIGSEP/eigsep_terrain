@@ -35,21 +35,27 @@ import numpy as np
 
 from eigsep_terrain.marjum_dem import MarjumDEM as DEM
 from eigsep_terrain.img import HorizonImage, PositionSolver, PRM_ORDER, dtype_r
+from eigsep_terrain.img_defaults import load_defaults
 
 BOX_SIZE = 0.3  # m
 
-DEFAULT_META = {
-    "0817": {"ant_px": (2 * 1366, 2 * 1221)},
-    "0833": {"ant_px": (1606, 2700)},
-    "0860": {"ant_px": (2924, 1945)},
-}
+# Generic, arbitrary-image-count defaults loaded from defaults.json (same
+# file used by tune_image.py / fit_image.py / plot_image_fit.py). Edit
+# defaults.json, not this script, when a starting value changes.
+DEFAULT_IMG_GLOB, DEFAULT_CACHE_FILE, DEFAULT_META, DEFAULT_PRMS_U_BY_KEY, IMG_KEYS = \
+    load_defaults()
 
-DEFAULT_PRMS = (
-    1734.11, 2069.00, 1760.97, 1.4706, 3.6932, -0.0493, 9830.11,
-    1611.31, 1849.00, 1659.78, 1.2053, 1.2414, -0.0244, 5081.08,
-    1541.90, 1998.96, 1765.06, 1.5412, 0.6147, 0.1585, 2328.64,
-    1651.83, 2024.17, 1781.46,
-)
+
+def _dummy_ant_pos_prior(prms_u, dem):
+    """Antenna position isn't tracked in defaults.json (2026 dataset fits
+    images independently, antenna term disabled by default). Build a dummy
+    prior at the mean camera E/N, 1m above ground, just so PositionSolver's
+    u<->log_h conversion has a valid DEM location."""
+    n_imgs = prms_u.size // len(PRM_ORDER)
+    es = prms_u[0::len(PRM_ORDER)][:n_imgs]
+    ns = prms_u[1::len(PRM_ORDER)][:n_imgs]
+    e0, n0 = float(es.mean()), float(ns.mean())
+    return np.array([e0, n0, float(dem.interp_alt(e0, n0)) + 1.0], dtype=dtype_r)
 
 # ── thresholds ────────────────────────────────────────────────────────────────
 ACCEPT_WARN_LOW  = 0.10   # below this → scaling too large
@@ -439,9 +445,8 @@ def build_argparser():
         description=__doc__,
         formatter_class=argparse.RawDescriptionHelpFormatter,
     )
-    ap.add_argument("--cache-file", default="marjum_dem.npz")
-    ap.add_argument("--img-glob",
-                    default="/Users/komalkaur/Desktop/eigsep_stuff/hrzn_mapping/imgs/IMG*.jpg")
+    ap.add_argument("--cache-file", default=DEFAULT_CACHE_FILE)
+    ap.add_argument("--img-glob", default=DEFAULT_IMG_GLOB)
 
     # Match the MCMC script args so you can paste the same flags
     ap.add_argument("--px-dist",   type=int,   default=30)
@@ -450,6 +455,10 @@ def build_argparser():
     ap.add_argument("--eps",       type=float, default=1e-2)
     ap.add_argument("--scaling",   type=float, default=1e-2,
                     help="DEMetropolisZ scaling to probe (same as MCMC --scaling)")
+    ap.add_argument("--set-cam-height", action="store_true", default=True,
+                    help="Override each image's u with DEM(e, n) + cam_height")
+    ap.add_argument("--cam-height", type=float, default=1.6,
+                    help="Camera height above ground [m] (default: 1.6)")
 
     # Prior sigmas — use the same values as the MCMC run
     ap.add_argument("--pos-err",      type=float, default=30.0,
@@ -509,7 +518,17 @@ def main(argv=None):
 
     fit_imgs, static_imgs = imgs, []
     img_keys = [img.key for img in fit_imgs]
-    prms_u = np.asarray(DEFAULT_PRMS, dtype=dtype_r)
+
+    cam_chunks = []
+    for key in img_keys:
+        p = np.asarray(DEFAULT_PRMS_U_BY_KEY[key], dtype=dtype_r)
+        if args.set_cam_height:
+            p = p.copy()
+            p[2] = float(dem.interp_alt(p[0], p[1])) + args.cam_height
+        cam_chunks.append(p)
+    cam_prms_u = np.concatenate(cam_chunks).astype(dtype_r)
+    ant_pos_prior = _dummy_ant_pos_prior(cam_prms_u, dem)
+    prms_u = np.concatenate([cam_prms_u, ant_pos_prior]).astype(dtype_r)
 
     _apply_prms_to_dem_and_meta(dem, meta, img_keys, prms_u, len(PRM_ORDER))
 

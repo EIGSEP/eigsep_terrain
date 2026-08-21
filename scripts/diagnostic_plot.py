@@ -39,6 +39,13 @@ import glob
 
 from eigsep_terrain.img import HorizonImage
 from eigsep_terrain.marjum_dem import MarjumDEM as DEM
+from eigsep_terrain.img_defaults import load_defaults
+
+# Generic, arbitrary-image-count defaults loaded from defaults.json (same
+# file used by tune_image.py / fit_image.py / plot_image_fit.py). Edit
+# defaults.json, not this script, when a starting value changes.
+DEFAULT_IMG_GLOB, DEFAULT_CACHE_FILE, DEFAULT_META, DEFAULT_PRMS_U_BY_KEY, IMG_KEYS = \
+    load_defaults()
 
 # ── figure style ──────────────────────────────────────────────────────────────
 plt.rcParams.update({
@@ -696,22 +703,17 @@ def plot_prior_sensitivity(trace, meta, stem, outdir):
     _suptitle(fig, meta, plot_name="Prior sensitivity (z-score & contraction)")
     _save(fig, outdir, "prior_sensitivity")
 
-def plot_canyon_overlay(trace, meta, stem, outdir):
+def plot_canyon_overlay(trace, meta, stem, outdir, img_glob=None, cache_file=None):
     fig, ax = plt.subplots()
 
-    CACHE_FILE = 'marjum_dem.npz'
-    dem = DEM(cache_file=CACHE_FILE)
+    cache_file = cache_file or DEFAULT_CACHE_FILE
+    img_glob = img_glob or DEFAULT_IMG_GLOB
+    dem = DEM(cache_file=cache_file)
 
-    imgmeta = {
-    '0817': {'ant_px': (2*1366, 2*1221)},
-    '0833': {'ant_px': (1606, 2700)},
-    #'0834': {'ant_px': (1622, 2251)},
-#    'best_prms': ( 1642.45,  1887.80,   1678.94,  1.1787,  1.2417, -0.0310,  2933.66),  #[LOSS= 0.0685]
-    '0860': {'ant_px': (2924, 1945)},
-    }
+    imgmeta = {k: dict(v) for k, v in DEFAULT_META.items()}
 
-    files = sorted(glob.glob('/Users/komalkaur/Desktop/eigsep_stuff/hrzn_mapping/imgs/IMG_08*.jpg'))
-    imgs = [HorizonImage(f, px_dist=30) for f in files]
+    files = sorted(glob.glob(img_glob))
+    imgs = [HorizonImage(f, imgmeta, px_dist=30) for f in files]
     imgs = [img for img in imgs if img.key in imgmeta]
 
     alpha = 0.02
@@ -719,12 +721,12 @@ def plot_canyon_overlay(trace, meta, stem, outdir):
     plt.plot(np.asarray(trace.posterior['ant_e']).flatten(), 
              np.asarray(trace.posterior['ant_n']).flatten(), 
              'k.', alpha=alpha, label=f'antenna')
-    colors = ['red', 'blue', 'magenta']
+    colors = plt.cm.tab10.colors
     for i, img in enumerate(imgs):
         try:
             plt.plot(np.asarray(trace.posterior[f'{img.key}_e']).flatten(), 
                      np.asarray(trace.posterior[f'{img.key}_n']).flatten(), 
-                     '.', alpha=alpha, label=f'img {i}', color=colors[i]);
+                     '.', alpha=alpha, label=f'img {i}', color=colors[i % len(colors)]);
         except(KeyError):
             plt.plot(np.asarray(trace.posterior['e']).flatten(), 
                      np.asarray(trace.posterior['n']).flatten(), 
@@ -733,8 +735,6 @@ def plot_canyon_overlay(trace, meta, stem, outdir):
     for lh in leg.legend_handles:
         lh.set_alpha(1)
 
-    ax.set_ylim(1600, 2300)
-    ax.set_xlim(1400, 2100)
     ax.set_title('MCMC steps in the canyon')
 
     _suptitle(fig, meta, plot_name="Canyon Overlay")
@@ -766,6 +766,8 @@ def build_argparser():
                     help="Effective step size vs post_std and prior_sigma")
     ap.add_argument("--prior-sensitivity", action="store_true",
                     help="Z-score and contraction ratio per param")
+    ap.add_argument("--canyon-overlay", action="store_true",
+                    help="Terrain plot with posterior E/N scatter per image + antenna")
     ap.add_argument("--all",        action="store_true", help="Enable every plot")
 
     # options
@@ -773,6 +775,10 @@ def build_argparser():
                     help="Display figures interactively instead of saving")
     ap.add_argument("--window", type=int, default=100,
                     help="Rolling window size for acceptance plot (default: 100)")
+    ap.add_argument("--img-glob", default=DEFAULT_IMG_GLOB,
+                    help="Used only by --canyon-overlay, to locate per-image keys.")
+    ap.add_argument("--cache-file", default=DEFAULT_CACHE_FILE,
+                    help="Used only by --canyon-overlay, for the DEM terrain plot.")
 
     return ap
 
@@ -860,7 +866,8 @@ def main(argv=None):
 
     if do_all or args.canyon_overlay:
         print("Plotting: canyon_overlay")
-        plot_canyon_overlay(trace, meta, stem, outdir)
+        plot_canyon_overlay(trace, meta, stem, outdir,
+                            img_glob=args.img_glob, cache_file=args.cache_file)
         plots_run += 1
 
     if plots_run == 0:
