@@ -1,5 +1,7 @@
 #!/usr/bin/env python
 """
+run from img folder
+
 Interactive matplotlib sliders for e, n, u, th, ph, ti, f — live-updates the
 ray-traced horizon overlay on the image (left) alongside an E/N terrain plot
 (right) with a marker showing the current camera position. Use this to
@@ -146,7 +148,11 @@ def main(argv=None):
                    colors="cyan", linewidths=1.5)
     ax_img.set_title("horizon fit", fontsize=10)
 
-    terrain_im = terrain_plot(ax=ax_terrain, erng_m=SLIDER_RANGES["e"], nrng_m=SLIDER_RANGES["n"])
+    # terrain_im = terrain_plot(ax=ax_terrain, erng_m=SLIDER_RANGES["e"], nrng_m=SLIDER_RANGES["n"])
+    terrain_im = terrain_plot(ax=ax_terrain, erng_m=(1000, 2500), nrng_m=(1500, 3000))
+
+    # ax_terrain.set_xlim(1000, 2500)
+    # ax_terrain.set_ylim(1500, 3000)
     ax_terrain.set_title("E / N position", fontsize=10)
 
     fig.suptitle(f"Image {key}", fontsize=13)
