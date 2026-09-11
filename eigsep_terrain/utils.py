@@ -2,7 +2,9 @@
 import warnings
 import numpy as np
 from scipy.constants import c as C
-import cv2
+# cv2 is imported lazily by the two segmentation helpers below. It ships in the
+# optional `img` extra, and importing it here made the whole package -- dem and
+# calc_horizon included -- unimportable without that extra.
 
 real_dtype = np.float32
 C = real_dtype(C)
@@ -317,7 +319,8 @@ def are_points_in_polygon(vertices, points):
 def mask_near_horizon(sky_mask, px_dist):
     """Generate mask of pixels within px_dist of edge in sky_mask.
     """
-    m = (sky_mask > 0).astype(np.uint8) * 255 
+    import cv2  # optional `img` extra
+    m = (sky_mask > 0).astype(np.uint8) * 255
     kernel = np.ones((3,3), np.uint8)
     inner_eroded = cv2.erode(m, kernel, iterations=1)
     edge = cv2.bitwise_xor(m, inner_eroded)
@@ -329,6 +332,7 @@ def mask_near_horizon(sky_mask, px_dist):
 def fill_psky_holes(psky, thr, fill_thresh, connectivity, px_dist):
     """Fill holes in probabilistically segmented sky.
     """
+    import cv2  # optional `img` extra
     sky = (psky >= thr)
     nlabels, labels, stats, _ = cv2.connectedComponentsWithStats((~sky).astype(np.uint8), connectivity=connectivity)
     for label in range(1, nlabels):
