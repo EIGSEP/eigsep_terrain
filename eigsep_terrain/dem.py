@@ -41,8 +41,10 @@ class DEM(dict):
                      **self.map_crd)
 
     def load_tif(self, files, survey_offset=np.array([0, 0,0])):
+        # keep the source float32; int32 truncated every elevation to a whole
+        # metre, biasing the horizon low and quantizing it by atan(1 m / r)
         _dem = np.hstack([np.vstack([np.array(PIL.Image.open(f),
-                                              dtype='int32')
+                                              dtype='float32')
                                      for f in files[i][::-1]])
                           for i in range(files.shape[0])])
         self.files = files
