@@ -16,6 +16,7 @@ dependencies = [
     "linsolve",
     "jax",
     "healpy",
+    "healjax",
 ]
 
 [project.optional-dependencies]
