@@ -12,3 +12,5 @@ notebooks/img_seg*.npz
 img_seg*.npz
 trace_seed*.nc
 trace*.png
+# USGS lidar DEM tiles, fetched by scripts/fetch_marjum_dem.sh
+eigsep_terrain/data/USGS_OPR_*
