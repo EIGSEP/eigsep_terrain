@@ -37,6 +37,4 @@ include-package-data = true
 line-length = 79
 
 [tool.setuptools.packages.find]
-where = ["."]
-include = ["eigsep_terrain*"]
-exclude = ["notebooks*", "tests*"]
+where = ["src"]
