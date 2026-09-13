@@ -1,5 +1,4 @@
 '''Utility functions for calculating distance and azimuth angles.'''
-import warnings
 import numpy as np
 from scipy.constants import c as C
 # cv2 is imported lazily by the two segmentation helpers below. It ships in the
@@ -216,76 +215,6 @@ def horizon_angle_to_distance(angles, alt):
     a visibility distance (m) accounting for earth curvature.'''
     th3 = np.arcsin(R_earth * np.sin(np.pi/2 + angles) / (R_earth + alt))
     return R_earth * (np.pi/2 - angles - th3)
-
-def conductivity_from_resistivity(resistivity_ohm_m):
-    '''Return the conductivity of a material given resistivity [Ohm m].
-    Note: the conductivity is returned in cgs units [1/s].'''
-    return 1 / (resistivity_ohm_m * 1.113e-12 * 100)
-
-def complex_permittivity(eps_r, sigma, freqs):
-    """
-    Calculate the complex permittivity of a material.
-
-    Parameters
-    ----------
-    eps_r : float
-        The relative permittivity of the material.
-    sigma : float
-        The conductivity of the material in cgs units [1/s].
-    freqs : array_like
-        Frequencies in Hz.
-
-    Returns
-    -------
-    eps_tilde : numpy.ndarray
-        The complex permittivity at the given frequencies.
-    
-    """
-    omega = 2 * np.pi * freqs  # Hz
-    eps_tilde = eps_r - 1j * (4 * np.pi * sigma) / omega
-    return eps_tilde
-
-def complex_ref_index(eps_r, sigma, freqs):
-    """
-    Calculate the complex refractive index of a material.
-
-    Parameters
-    ----------
-    eps_r : float
-        The relative permittivity of the material.
-    sigma : float
-        The conductivity of the material in cgs units [1/s].
-    freqs : array_like
-        Frequencies in Hz.
-
-    Returns
-    -------
-    n_tilde : numpy.ndarray
-        The complex refractive index at the given frequencies.
-    
-    """
-    eps_tilde = complex_permittivity(eps_r, sigma, freqs)
-    n_tilde = np.sqrt(eps_tilde)
-    return n_tilde
-
-def permittivity_from_conductivity(conductivity, freqs):
-    '''Return the refractive index for a material with permittivity 1.
-    This function is deprecated; use complex_ref_index instead.'''
-    warnings.warn(
-        "permittivity_from_conductivity is deprecated due to confusing"
-        "naming. It actually returns refractive index, assuming relative"
-        "permittivity of 1. Use complex_ref_index instead", 
-        DeprecationWarning
-    )
-    return complex_ref_index(1, conductivity, freqs)
-
-def reflection_coefficient(eta, eta0=1):
-    '''Return the reflection coefficient crossing from eta0 to eta
-    [refractive index]. This assumes normal incidence.
-    We return the complex reflection coefficient appropriate for
-    voltage or electric field. Power quantities should use the abs squared.
-    '''
-    return (eta0 - eta) / (eta0 + eta)
 
 def are_points_in_polygon(vertices, points):
     """Determine if multiple points are inside a polygon using ray-casting algorithm.

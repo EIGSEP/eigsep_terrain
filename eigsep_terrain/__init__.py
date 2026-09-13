@@ -4,6 +4,7 @@ __version__ = "0.0.1"
 from . import dem
 from . import ray
 from . import utils
+from . import reflectivity
 from . import plot
 
 # img and seg need the optional `img` extra (torch, transformers, opencv,

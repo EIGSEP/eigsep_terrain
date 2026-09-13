@@ -7,6 +7,8 @@ authors = [{ name = "Aaron Parsons" }]
 readme = "README.md"
 dependencies = [
     "numpy",
+    "scipy",
+    "opencv-python",
     "xmltodict",
     "Pillow",
     "pyuvdata",
@@ -19,14 +21,12 @@ dependencies = [
 
 [project.optional-dependencies]
 img = [
-    "opencv-python",
     "torch",
     "transformers",
     "pymc",
     "arviz",
     "pytensor",
 ]
-
 numba = ["numba"]
 
 [tool.setuptools]
