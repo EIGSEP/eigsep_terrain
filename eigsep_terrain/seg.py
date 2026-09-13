@@ -1,7 +1,8 @@
 import numpy as np
 import torch
-from PIL import Image
+from PIL import Image, ImageOps
 from transformers import AutoImageProcessor, AutoModelForSemanticSegmentation
+from . import imageio  # noqa: F401 (registers the HEIC opener)
 
 class TiledSkyProbSegFormer:
     """
@@ -56,7 +57,7 @@ class TiledSkyProbSegFormer:
         Returns:
           psky_full: (H, W) float32 in [0,1]
         """
-        img = Image.open(filename).convert("RGB")
+        img = ImageOps.exif_transpose(Image.open(filename)).convert("RGB")
         H, W = img.size[1], img.size[0]
 
         step = tile - overlap
