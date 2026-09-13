@@ -5,7 +5,7 @@ import PIL.Image
 import os
 import pyuvdata
 import xmltodict
-from .utils import *
+from .utils import az_bin, calc_az_bin_range, calc_rmin
 from .ray import ray_trace_basic, healpix_rays, calc_maxiter
 
 dtype_r = np.float32
