@@ -250,7 +250,7 @@ class DEM(dict):
             imp = self.build_maxpool_pyramid()
             if hangles is None:
                 hangles = np.zeros(n_az)
-            crds = np.zeros([2, hangles.size], dtype=int)
+            crds = np.zeros([2, hangles.size], dtype=float)
             U, f = imp[-1]
             e_edges, n_edges = self.get_en(edges=True, decimate=f)
             _ni, _ei = 0, 0
