@@ -16,6 +16,7 @@ dependencies = [
     "linsolve",
     "jax",
     "healpy",
+    "ipython>=9.13.0",
     "matplotlib>=3.10.9",
 ]
 
