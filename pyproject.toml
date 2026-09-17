@@ -16,6 +16,7 @@ dependencies = [
     "linsolve",
     "jax",
     "healpy",
+    "matplotlib>=3.10.9",
 ]
 
 [project.optional-dependencies]
