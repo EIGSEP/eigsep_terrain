@@ -5,7 +5,7 @@ import PIL.Image
 import os
 import pyuvdata
 import xmltodict
-from .utils import *
+from .utils import az_bin, calc_az_bin_range, calc_rmin
 from .ray import ray_trace_basic, healpix_rays, calc_maxiter
 
 dtype_r = np.float32
@@ -41,8 +41,10 @@ class DEM(dict):
                      **self.map_crd)
 
     def load_tif(self, files, survey_offset=np.array([0, 0,0])):
+        # keep the source float32; int32 truncated every elevation to a whole
+        # metre, biasing the horizon low and quantizing it by atan(1 m / r)
         _dem = np.hstack([np.vstack([np.array(PIL.Image.open(f),
-                                              dtype='int32')
+                                              dtype='float32')
                                      for f in files[i][::-1]])
                           for i in range(files.shape[0])])
         self.files = files
@@ -248,7 +250,7 @@ class DEM(dict):
             imp = self.build_maxpool_pyramid()
             if hangles is None:
                 hangles = np.zeros(n_az)
-            crds = np.zeros([2, hangles.size], dtype=int)
+            crds = np.zeros([2, hangles.size], dtype=float)
             U, f = imp[-1]
             e_edges, n_edges = self.get_en(edges=True, decimate=f)
             _ni, _ei = 0, 0

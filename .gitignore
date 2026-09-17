@@ -42,3 +42,5 @@ trace_img*_seed*_meta.json
 plots_seed*/
 plots_manual/
 *runs/
+# USGS lidar DEM tiles, fetched by scripts/fetch_marjum_dem.sh
+src/eigsep_terrain/data/USGS_OPR_*

@@ -1,7 +1,8 @@
 import os
 import numpy as np
 from matplotlib.image import imread
-from .utils import rot_m, mask_near_horizon, fill_psky_holes
+from healjax.coord import rot_m
+from .utils import mask_near_horizon, fill_psky_holes
 from .ray_numba import ray_distance_coarse_to_fine_numba
 from .seg import TiledSkyProbSegFormer
 from transformers import pipeline

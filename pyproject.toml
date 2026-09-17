@@ -16,6 +16,9 @@ dependencies = [
     "linsolve",
     "jax",
     "healpy",
+    "healjax",
+    "ipython>=9.13.0",
+    "matplotlib>=3.10.9",
 ]
 
 [project.optional-dependencies]
@@ -36,6 +39,4 @@ include-package-data = true
 line-length = 79
 
 [tool.setuptools.packages.find]
-where = ["."]
-include = ["eigsep_terrain*"]
-exclude = ["notebooks*", "tests*"]
+where = ["src"]

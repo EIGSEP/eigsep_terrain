@@ -28,7 +28,8 @@ from eigsep_terrain.marjum_dem import MarjumDEM as DEM
 from eigsep_terrain.img import (
     HorizonImage, PositionSolver, PRM_ORDER, pixels_to_rays, dtype_r
 )
-from eigsep_terrain.utils import rot_m, mask_near_horizon
+from healjax.coord import rot_m
+from eigsep_terrain.utils import mask_near_horizon
 
 BOX_SIZE = 0.3  # m
 IMG_W = 640     # synthetic image width  (pixels) — keep small for speed
