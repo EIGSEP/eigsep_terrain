@@ -12,7 +12,7 @@ SURVEY_OFFSET = np.array([-11, 36, 3])
 #USGS_OPR_UT_WestEast_B22_12STJ%04d.tif'
 
 NUM_EAST = 3
-NUM_NORTH = 4
+NUM_NORTH = 5
 QUADS = tuple(L * 100 + B for L in range(91, 91 + NUM_NORTH)
                           for B in range(45, 45 + NUM_EAST))
 

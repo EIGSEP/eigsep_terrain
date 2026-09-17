@@ -19,6 +19,8 @@ class DEM(dict):
     def __init__(self, cache_file=None, clear_cache=False, backend=DEFAULT_BACKEND):
         self._cache_file = cache_file
         self.backend = backend
+        self.e0_px = 0
+        self.n0_px = 0
         if clear_cache and os.path.exists(cache_file):
             os.remove(cache_file)
         if cache_file is not None and os.path.exists(cache_file):
@@ -32,12 +34,19 @@ class DEM(dict):
         self.data = npz['dem']
         self.map_crd = {k: npz[k] for k in XML_CRD_KEYWORDS}
         self.survey_offset = npz['survey_offset']
+        # e0_px/n0_px let the array grow (e.g. adding a tile to the south or
+        # west) without moving what e_m=0/n_m=0 already means to every
+        # existing caller -- absent in caches saved before this existed, so
+        # default to 0 (the previously-implicit, origin-at-row/col-0 behavior).
+        self.e0_px = int(npz['e0_px']) if 'e0_px' in npz.files else 0
+        self.n0_px = int(npz['n0_px']) if 'n0_px' in npz.files else 0
 
     def save_cache(self):
         '''Cache DEM data in npz file.'''
         if self._cache_file is not None:
             np.savez(self._cache_file, dem=self.data, res=self.res,
                      files=self.files, survey_offset=self.survey_offset,
+                     e0_px=self.e0_px, n0_px=self.n0_px,
                      **self.map_crd)
 
     def load_tif(self, files, survey_offset=np.array([0, 0,0])):
@@ -89,14 +98,22 @@ class DEM(dict):
         lat, lon, alt = pyuvdata.utils.LatLonAlt_from_XYZ(xyz)
         return np.rad2deg(lat), np.rad2deg(lon), alt
 
-    def m2px(self, *args, res=None):
+    def m2px(self, *args, axis=None, res=None):
+        '''Convert meters to array-index pixels: round(m / res) + offset,
+        where offset is e0_px/n0_px for axis='e'/'n' (0 for axis=None, the
+        legacy no-offset behavior). The offset is what lets the array grow
+        in a given direction (e.g. a newly downloaded tile to the south)
+        without changing what any already-recorded e_m/n_m value resolves
+        to -- see load_cache's e0_px/n0_px docstring note.'''
         if res is None:
             res = self.res
-        px = tuple(np.around(m / res).astype(int) for m in args)
+        offset = {'e': self.e0_px, 'n': self.n0_px}.get(axis, 0)
+        px = tuple(np.around(m / res).astype(int) + offset for m in args)
         return px
-        
+
     def interp_alt(self, e_m, n_m, return_vec=False):
-        e_px, n_px = self.m2px(e_m, n_m)
+        (e_px,) = self.m2px(e_m, axis='e')
+        (n_px,) = self.m2px(n_m, axis='n')
         u_m = self.data[n_px, e_px]
         if return_vec:
             try:
@@ -114,11 +131,11 @@ class DEM(dict):
         if erng_m is None:
             emn, emx = 0, self.data.shape[1]
         else:
-            emn, emx = self.m2px(*erng_m)
+            emn, emx = self.m2px(*erng_m, axis='e')
         if nrng_m is None:
             nmn, nmx = 0, self.data.shape[0]
         else:
-            nmn, nmx = self.m2px(*nrng_m)
+            nmn, nmx = self.m2px(*nrng_m, axis='n')
         if edges:
             _E = np.arange(emn, emx + decimate, decimate) - 0.5
             _N = np.arange(nmn, nmx + decimate, decimate) - 0.5
@@ -128,8 +145,8 @@ class DEM(dict):
         if return_px:
             return _E, _N
         else:
-            return _E * self.res, _N * self.res
-            
+            return (_E - self.e0_px) * self.res, (_N - self.n0_px) * self.res
+
     def get_tile(self, erng_m=None, nrng_m=None, mesh=True, decimate=1):
         _E, _N = self.get_en(erng_m, nrng_m, return_px=True, decimate=decimate)
         U = self.data[_N][:, _E]
@@ -137,7 +154,7 @@ class DEM(dict):
             E, N = np.meshgrid(_E, _N)
         else:
             E, N = _E, _N
-        return E * self.res, N * self.res, U
+        return (E - self.e0_px) * self.res, (N - self.n0_px) * self.res, U
 
     def export_jax(self, dtype=dtype_r):
         (E, N) = self.get_en()
@@ -158,7 +175,8 @@ class DEM(dict):
         dr = np.arange(-k, k+1) * res
         rs2 = dr[:, None]**2 + dr[None, :]**2
         root = np.sqrt((r_zoa**2 - rs2).clip(0))
-        e_px, n_px = self.m2px(e_m, n_m)
+        (e_px,) = self.m2px(e_m, axis='e')
+        (n_px,) = self.m2px(n_m, axis='n')
         h = np.zeros_like(e_m)
         for i in range(e_px.size):
             ei, ni = e_px[i], n_px[i]
@@ -282,8 +300,8 @@ class DEM(dict):
                 # base case
                 for s in slices:
                     update = (hangles[s] < h)
-                    crds[0,s] = np.where(update, self.res*(_ni+ni), crds[0,s])
-                    crds[1,s] = np.where(update, self.res*(_ei+ei), crds[1,s])
+                    crds[0,s] = np.where(update, self.res*(_ni+ni-self.n0_px), crds[0,s])
+                    crds[1,s] = np.where(update, self.res*(_ei+ei-self.e0_px), crds[1,s])
                     # sets to highest value
                     hangles[s] = np.where(update, h, hangles[s])
             elif np.any(np.concatenate([hangles[s] < h for s in slices])):
