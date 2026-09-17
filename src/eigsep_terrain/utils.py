@@ -13,6 +13,28 @@ C = real_dtype(C)
 R_earth = 6378e3 # m
 
 
+def rot_m(ang, vec):
+    """Return the right-handed rotation matrix about ``vec`` by ``ang``.
+
+    Newer healjax releases provide this helper. Keep the NumPy equivalent
+    here so image-pose tools also run with the declared older release.
+    """
+    c = np.cos(ang)
+    s = np.sin(ang)
+    C = 1 - c
+    x, y, z = vec[..., 0], vec[..., 1], vec[..., 2]
+    xs, ys, zs = x * s, y * s, z * s
+    xC, yC, zC = x * C, y * C, z * C
+    xyC, yzC, zxC = x * yC, y * zC, z * xC
+    rm = np.array([[x * xC + c, xyC - zs, zxC + ys],
+                   [xyC + zs, y * yC + c, yzC - xs],
+                   [zxC - ys, yzC + xs, z * zC + c]], dtype=np.double)
+    if rm.ndim > 2:
+        axes = list(range(rm.ndim))
+        return rm.transpose(axes[-1:] + axes[:-1])
+    return rm
+
+
 def distance(a, b):
     '''Return distance from A to B.'''
     return np.linalg.norm(b - a)
