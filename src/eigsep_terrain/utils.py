@@ -1,4 +1,8 @@
-'''Utility functions for calculating distance and azimuth angles.'''
+'''Terrain-specific helpers for distances, azimuth binning, and sky masks.
+
+General coordinate transforms (``rot_m``, ``xyz2thphi``, ...) live in
+``healjax.coord``; import them from there rather than redefining them here.
+'''
 import numpy as np
 from scipy.constants import c as C
 import cv2
@@ -7,27 +11,6 @@ real_dtype = np.float32
 C = real_dtype(C)
 
 R_earth = 6378e3 # m
-
-
-# copied from aipy.coord
-def rot_m(ang, vec):
-    """Return 3x3 matrix defined by rotation by 'ang' around the
-    axis 'vec', according to the right-hand rule.  Both can be vectors,
-    returning a vector of rotation matrices.  Rotation matrix will have a
-    scaling of |vec| (i.e. normalize |vec|=1 for a pure rotation)."""
-    c = np.cos(ang); s = np.sin(ang); C = 1-c 
-    x,y,z = vec[...,0], vec[...,1], vec[...,2]
-    xs,ys,zs = x*s, y*s, z*s 
-    xC,yC,zC = x*C, y*C, z*C 
-    xyC,yzC,zxC = x*yC, y*zC, z*xC
-    rm = np.array([[x*xC+c, xyC-zs, zxC+ys],
-                   [xyC+zs, y*yC+c, yzC-xs],
-                   [zxC-ys, yzC+xs, z*zC+c]], dtype=np.double)
-    if rm.ndim > 2:
-        axes = list(range(rm.ndim))
-        return rm.transpose(axes[-1:] + axes[:-1])
-    else:
-        return rm
 
 
 def distance(a, b):
