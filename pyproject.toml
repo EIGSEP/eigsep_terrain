@@ -20,6 +20,7 @@ dependencies = [
     "healjax",
     "ipython>=9.13.0",
     "matplotlib>=3.10.9",
+]
 
 [project.optional-dependencies]
 img = [
