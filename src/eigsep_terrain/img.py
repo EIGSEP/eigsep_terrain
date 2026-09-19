@@ -144,7 +144,9 @@ class HorizonImage:
     def export_jax(self, n_rays=1000, eps=1e-3, dtype=dtype_r):
         x_px, y_px = self.choose_pixels(N=n_rays)
         psky = self.psky[x_px, y_px].astype(dtype).clip(eps, 1-eps)
-        ant_px = np.array(self.meta['ant_px'][::-1], dtype=np.int32)
+        # not every image has a hand-picked antenna pixel (see total_logL)
+        has_ant = 'ant_px' in self.meta
+        ant_px = self.meta['ant_px'][::-1] if has_ant else (0, 0)
         return dict(
             key=self.key,
             npix_y=np.int32(self.npix_y),
@@ -152,7 +154,10 @@ class HorizonImage:
             x_px=x_px.astype(np.int32),
             y_px=y_px.astype(np.int32),
             psky=psky,
-            ant_px=ant_px,
+            ant_px=np.array(ant_px, dtype=dtype),
+            has_ant=has_ant,
+            prms=np.array([self.prms[k] for k in PRM_ORDER], dtype=dtype),
+            px_smooth=dtype(self.px_smooth),
         )
         
     def horizon_ray_logL(self, dem, n_rays=1000, dtype=dtype_r, eps=1e-3,
