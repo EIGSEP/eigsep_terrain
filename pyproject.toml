@@ -17,7 +17,8 @@ dependencies = [
     "linsolve",
     "jax",
     "healpy",
-    "healjax",
+    # not on PyPI
+    "healjax @ git+https://github.com/EIGSEP/healjax.git",
     "ipython>=9.13.0",
     "matplotlib>=3.10.9",
 ]
