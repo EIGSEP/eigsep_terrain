@@ -8,8 +8,9 @@ import jax.numpy as jnp
 
 from eigsep_terrain.ray import ray_trace_basic
 from eigsep_terrain.ray_jax import ray_trace_basic_jax, ray_trace_basic_jax_jit, ray_distance_coarse_to_fine
-from eigsep_terrain.img_jax import horizon_ray_logL_jax, ant_logL_jax
-from eigsep_terrain.solver_jax import logL_from_problem_jit
+from eigsep_terrain.img_jax import (horizon_ray_logL_jax, ant_logL_jax,
+                                    get_rays_jax)
+from eigsep_terrain.solver_jax import logL_from_problem_jit, stack_problem
 
 
 @pytest.mark.parametrize("dtype", [jnp.float32, jnp.float64])
@@ -108,10 +109,9 @@ def test_horizon_ray_logL_jax_smoke_and_expected_value_simple():
     p0 = 0.25
     psky = jnp.full((x_px.shape[0],), p0, dtype=jnp.float32)
 
-    # pose: pointing "down" in your convention depends on rotations; we just smoke-test
-    # with a configuration that should generally produce intersections quickly.
+    # th=pi flips the camera's +z boresight to point straight down
     e, n, u = 0.0, 0.0, 1.0
-    th, ph, ti, f = 0.0, 0.0, 0.0, 50.0
+    th, ph, ti, f = np.pi, 0.0, 0.0, 50.0
 
     logL = horizon_ray_logL_jax(
         E, N, U,
@@ -125,8 +125,6 @@ def test_horizon_ray_logL_jax_smoke_and_expected_value_simple():
     assert logL.shape == ()
     assert jnp.isfinite(logL)
 
-    # This assertion assumes that for this pose your rays intersect ground for the selected pixels.
-    # If your camera convention makes many rays go upward, relax this to a smoke test only.
     expected = x_px.shape[0] * np.log1p(-p0)
     np.testing.assert_allclose(float(logL), expected, rtol=5e-2, atol=5e-2)
 
@@ -147,6 +145,7 @@ def test_solver_logL_from_problem_jit_smoke():
     x_px = jnp.stack([jnp.array([2, 4, 6, 8], dtype=jnp.int32)])
     y_px = jnp.stack([jnp.array([1, 3, 5, 7], dtype=jnp.int32)])
     psky = jnp.stack([jnp.full((4,), 0.2, dtype=jnp.float32)])
+    correlation_px = jnp.array([4.0], dtype=jnp.float32)
 
     # 1 "all" image (same one), and treat it as fit-indexed
     all_Nu = jnp.array([16], dtype=jnp.int32)
@@ -159,12 +158,14 @@ def test_solver_logL_from_problem_jit_smoke():
 
     problem = {
         "dem": {"E": E, "N": N, "U": U},
-        "fit": {"Nu": Nu, "Nv": Nv, "x_px": x_px, "y_px": y_px, "psky": psky},
+        "fit": {"Nu": Nu, "Nv": Nv, "x_px": x_px, "y_px": y_px, "psky": psky,
+                "correlation_px": correlation_px},
         "all": {
             "Nu": all_Nu,
             "Nv": all_Nv,
-            "ant_uv_u": ant_uv_u,
-            "ant_uv_v": ant_uv_v,
+            "ant_u_px": ant_uv_u,
+            "ant_v_px": ant_uv_v,
+            "has_ant": jnp.array([True]),
             "fixed_prms": fixed_prms,
             "is_fit": is_fit,
             "fit_index": fit_index,
@@ -199,12 +200,14 @@ def test_logL_jittable_and_repeatable():
             "x_px": jnp.stack([jnp.array([2, 6], dtype=jnp.int32)]),
             "y_px": jnp.stack([jnp.array([3, 7], dtype=jnp.int32)]),
             "psky": jnp.stack([jnp.array([0.2, 0.8], dtype=jnp.float32)]),
+            "correlation_px": jnp.array([4.0], dtype=jnp.float32),
         },
         "all": {
             "Nu": jnp.array([16], dtype=jnp.int32),
             "Nv": jnp.array([16], dtype=jnp.int32),
-            "ant_uv_u": jnp.array([8], dtype=jnp.int32),
-            "ant_uv_v": jnp.array([8], dtype=jnp.int32),
+            "ant_u_px": jnp.array([8], dtype=jnp.float32),
+            "ant_v_px": jnp.array([8], dtype=jnp.float32),
+            "has_ant": jnp.array([True]),
             "fixed_prms": jnp.zeros((1, 7), dtype=jnp.float32),
             "is_fit": jnp.array([True], dtype=jnp.bool_),
             "fit_index": jnp.array([0], dtype=jnp.int32),
@@ -465,3 +468,123 @@ def test_ray_trace_basic_jax_matches_numpy_on_random_rays():
     assert np.array_equal(np.isnan(r_np), np.isnan(r_j))
     mask = np.isfinite(r_np)
     assert np.all(np.abs(r_np[mask] - r_j[mask]) <= float(delta) * 1.05)
+
+
+def _numpy_rays(Nu, Nv, f, th, ph, ti, uv):
+    from eigsep_terrain.img import pixels_to_rays
+    from eigsep_terrain.utils import rot_m
+    z_rays = pixels_to_rays(Nu, Nv, f, uv=uv)
+    rm = rot_m(ph, np.array([0, 0, 1])) @ (
+        rot_m(th, np.array([0, 1, 0])) @ rot_m(ti, np.array([0, 0, 1])))
+    return np.einsum('ij,j...->i...', rm, z_rays)
+
+
+def test_get_rays_jax_matches_numpy():
+    """get_rays_jax must follow the same camera convention as
+    HorizonImage.get_rays (boresight along +z before rotation)."""
+    Nu, Nv, f = 400, 600, 350.0
+    th, ph, ti = 1.2, -0.7, 0.05
+    u = np.array([0, 17, 200, 399])
+    v = np.array([599, 3, 300, 150])
+    expected = _numpy_rays(Nu, Nv, f, th, ph, ti, (u, v))
+    got = get_rays_jax(Nu, Nv, f, th, ph, ti, u, v)
+    np.testing.assert_allclose(np.asarray(got), expected, atol=1e-5)
+
+
+def _numpy_horizon_logL(E, N, U, Nu, Nv, prm, x_px, y_px, psky, corr_px):
+    """Same computation as HorizonImage.horizon_ray_logL, without an
+    image on disk."""
+    e, n, u, th, ph, ti, f = prm
+    rays = _numpy_rays(Nu, Nv, f, th, ph, ti, (x_px, y_px))
+    r = ray_trace_basic(np.asarray(E), np.asarray(N), np.asarray(U),
+                        np.array([e, n, u], dtype=np.float32),
+                        rays.astype(np.float32))
+    per_pixel = np.where(np.isnan(r), np.log(psky), np.log1p(-psky))
+    col_span = max(y_px.max() - y_px.min(), 1)
+    n_eff = np.clip(col_span / corr_px, 1, len(x_px))
+    return np.mean(per_pixel) * n_eff
+
+
+def test_horizon_ray_logL_jax_matches_numpy_on_hill():
+    """Pixels straddling a hill horizon: some rays hit, some miss."""
+    E, N, U = _sloped_dem(npnts=200, extent=100.0, slope_e=0.3,
+                          slope_n=0.0, dtype=jnp.float32)
+    U = U.T  # _sloped_dem is indexed [e, n]; DEM data is [n, e]
+    Nu, Nv = 64, 64
+    # looking east (ph=0), boresight tipped to the horizon (th=pi/2)
+    prm = (0.0, 0.0, 5.0, np.pi / 2, 0.0, 0.0, 40.0)
+    rng = np.random.default_rng(1)
+    x_px = rng.integers(0, Nu, 50)
+    y_px = rng.integers(0, Nv, 50)
+    psky = rng.uniform(0.1, 0.9, 50).astype(np.float32)
+    corr_px = 8.0
+    expected = _numpy_horizon_logL(E, N, U, Nu, Nv, prm, x_px, y_px,
+                                   psky, corr_px)
+    got = horizon_ray_logL_jax(E, N, U, Nu, Nv, *prm,
+                               jnp.asarray(x_px), jnp.asarray(y_px),
+                               jnp.asarray(psky), eps=1e-6,
+                               correlation_px=corr_px)
+    np.testing.assert_allclose(float(got), expected, rtol=1e-4)
+
+
+def test_ant_logL_jax_matches_numpy_and_has_finite_grad():
+    Nu, Nv = 400, 600
+    prm = (1.0, 2.0, 3.0, 1.4, 0.3, 0.02, 350.0)
+    ant_uv = (123.0, 456.0)
+    ant = np.array([40.0, 25.0, 2.0])
+    box_size = 0.3
+    ray = _numpy_rays(Nu, Nv, prm[-1], *prm[3:6], np.array(ant_uv))
+    r_ant = ant - np.array(prm[:3])
+    cos = np.dot(ray, r_ant) / np.linalg.norm(ray) / np.linalg.norm(r_ant)
+    dth = np.arccos(cos.clip(-1, 1))
+    sig = box_size / np.linalg.norm(r_ant)
+    expected = np.log(1 / np.sqrt(2 * np.pi * sig**2)) - 0.5 * dth**2 / sig**2
+
+    def f(ant_pos):
+        return ant_logL_jax(Nu, Nv, *prm, *ant_pos, *ant_uv, box_size)
+
+    np.testing.assert_allclose(float(f(jnp.asarray(ant))), expected,
+                               rtol=1e-3)
+    # antenna placed exactly on the pixel's ray: delta_theta = 0
+    on_ray = jnp.asarray(np.array(prm[:3]) + 30.0 * ray)
+    assert np.all(np.isfinite(np.asarray(jax.grad(f)(on_ray))))
+
+
+def test_stack_problem_from_export():
+    """stack_problem consumes PositionSolver.export_jax() output,
+    including static images and images lacking an ant_px."""
+    E, N, U = _flat_dem(npnts=64, extent=50.0)
+
+    def img(prms, has_ant):
+        return dict(npix_y=np.int32(16), npix_x=np.int32(16),
+                    x_px=np.array([2, 6, 9], np.int32),
+                    y_px=np.array([3, 7, 11], np.int32),
+                    psky=np.array([0.2, 0.5, 0.8], np.float32),
+                    ant_px=np.array([8.0, 8.0], np.float32),
+                    has_ant=has_ant,
+                    prms=np.array(prms, np.float32),
+                    px_smooth=np.float32(4))
+
+    fit_img = img([0, 0, 1, np.pi, 0, 0, 50], True)
+    static_ant = img([5, 5, 1, np.pi / 2, 0, 0, 50], True)
+    static_noant = img([0, 0, 0, 0, 0, 0, 0], False)
+    export = dict(dem=dict(E=E, N=N, U=U), fit=[fit_img],
+                  all=[fit_img, static_ant, static_noant],
+                  box_size=np.float32(0.3))
+    problem = stack_problem(export)
+    assert problem['all']['is_fit'].tolist() == [True, False, False]
+    assert problem['all']['has_ant'].tolist() == [True, True, False]
+
+    theta = jnp.concatenate([jnp.asarray(fit_img['prms']),
+                             jnp.array([20.0, 5.0, 1.0])])
+    logL = logL_from_problem_jit(theta, problem, eps=1e-6)
+    assert np.isfinite(float(logL))
+
+    # the no-ant image contributes nothing; the others match per-term calls
+    expected = horizon_ray_logL_jax(
+        E, N, U, 16, 16, *fit_img['prms'], fit_img['x_px'],
+        fit_img['y_px'], fit_img['psky'], eps=1e-6, correlation_px=4.0)
+    for d in (fit_img, static_ant):
+        expected += ant_logL_jax(16, 16, *d['prms'], 20.0, 5.0, 1.0,
+                                 8.0, 8.0, 0.3)
+    np.testing.assert_allclose(float(logL), float(expected), rtol=1e-5)
