@@ -1,0 +1,36 @@
+[2209] stage1 cost=4.72e+05 status=3 | final status=3 | calc_horizon calls=211 (cache hits=100) | RMSE 980.44px -> 56.53px
+[2210] stage1 cost=1.96e+05 status=3 | final status=3 | calc_horizon calls=508 (cache hits=244) | RMSE 345.15px -> 37.44px
+[2211] stage1 cost=3.39e+05 status=3 | final status=3 | calc_horizon calls=165 (cache hits=76) | RMSE 456.84px -> 48.40px
+[2213] stage1 cost=8.58e+04 status=3 | final status=3 | calc_horizon calls=146 (cache hits=64) | RMSE 399.90px -> 23.91px
+[2214] stage1 cost=2.24e+06 status=3 | final status=3 | calc_horizon calls=289 (cache hits=136) | RMSE 868.06px -> 120.33px
+[2215] stage1 cost=1.19e+06 status=3 | final status=3 | calc_horizon calls=654 (cache hits=316) | RMSE 358.70px -> 91.39px
+[2216] stage1 cost=3.9e+05 status=3 | final status=3 | calc_horizon calls=252 (cache hits=116) | RMSE 169.79px -> 49.78px
+[2217] stage1 cost=2.57e+05 status=3 | final status=3 | calc_horizon calls=137 (cache hits=60) | RMSE 588.11px -> 44.06px
+[2218] stage1 cost=3.15e+06 status=3 | final status=3 | calc_horizon calls=175 (cache hits=80) | RMSE 706.14px -> 152.89px
+[2219] stage1 cost=4.74e+06 status=3 | final status=3 | calc_horizon calls=147 (cache hits=64) | RMSE 560.58px -> 194.31px
+[2220] stage1 cost=2.08e+06 status=3 | final status=3 | calc_horizon calls=161 (cache hits=72) | RMSE 227.71px -> 119.57px
+[2221] stage1 cost=7.05e+05 status=3 | final status=3 | calc_horizon calls=107 (cache hits=48) | RMSE 108.93px -> 71.49px
+[2222] stage1 cost=2.99e+06 status=3 | final status=3 | calc_horizon calls=212 (cache hits=108) | RMSE 391.50px -> 140.66px
+[2223] stage1 cost=2.3e+06 status=3 | final status=3 | calc_horizon calls=88 (cache hits=36) | RMSE 281.09px -> 132.68px
+[2224] stage1 cost=8.71e+05 status=3 | final status=3 | calc_horizon calls=238 (cache hits=108) | RMSE 382.63px -> 76.67px
+[2225] stage1 cost=4.32e+06 status=3 | final status=3 | calc_horizon calls=133 (cache hits=64) | RMSE 467.55px -> 170.91px
+[2226] stage1 cost=2.42e+06 status=3 | final status=3 | calc_horizon calls=134 (cache hits=60) | RMSE 173.00px -> 133.49px
+[2227] stage1 cost=3.96e+06 status=3 | final status=3 | calc_horizon calls=184 (cache hits=92) | RMSE 357.70px -> 177.12px
+[2228] stage1 cost=3.92e+06 status=3 | final status=3 | calc_horizon calls=218 (cache hits=112) | RMSE 410.55px -> 165.15px
+[2229] stage1 cost=9.56e+06 status=3 | final status=3 | calc_horizon calls=78 (cache hits=28) | RMSE 315.39px -> 252.83px
+[2230] stage1 cost=1.56e+06 status=3 | final status=3 | calc_horizon calls=288 (cache hits=128) | RMSE 394.82px -> 108.35px
+[2231] stage1 cost=3.62e+06 status=3 | final status=3 | calc_horizon calls=163 (cache hits=72) | RMSE 499.95px -> 158.73px
+[2232] stage1 cost=7.51e+05 status=3 | final status=3 | calc_horizon calls=299 (cache hits=140) | RMSE 253.81px -> 71.23px
+[2233] stage1 cost=4.08e+06 status=3 | final status=3 | calc_horizon calls=152 (cache hits=68) | RMSE 205.59px -> 168.42px
+[2234] stage1 cost=1.41e+05 status=3 | final status=3 | calc_horizon calls=618 (cache hits=296) | RMSE 178.48px -> 32.38px
+[2235] stage1 cost=3.9e+06 status=3 | final status=3 | calc_horizon calls=181 (cache hits=64) | RMSE 487.65px -> 162.41px
+[2236] stage1 cost=9.55e+06 status=3 | final status=3 | calc_horizon calls=91 (cache hits=40) | RMSE 472.00px -> 252.31px
+[2237] stage1 cost=2.49e+06 status=3 | final status=3 | calc_horizon calls=125 (cache hits=56) | RMSE 613.10px -> 135.46px
+[2238] stage1 cost=8.97e+06 status=3 | final status=3 | calc_horizon calls=367 (cache hits=168) | RMSE 593.01px -> 244.54px
+[2239] stage1 cost=4.34e+06 status=3 | final status=3 | calc_horizon calls=102 (cache hits=44) | RMSE 368.00px -> 170.03px
+[2241] stage1 cost=3.38e+06 status=3 | final status=3 | calc_horizon calls=213 (cache hits=96) | RMSE 361.90px -> 129.54px
+[2242] stage1 cost=2.54e+06 status=3 | final status=3 | calc_horizon calls=171 (cache hits=76) | RMSE 154.96px -> 148.85px
+[2243] stage1 cost=6.46e+06 status=3 | final status=3 | calc_horizon calls=157 (cache hits=68) | RMSE 348.22px -> 147.08px
+[2245] stage1 cost=4.45e+07 status=3 | final status=3 | calc_horizon calls=156 (cache hits=72) | RMSE 974.38px -> 190.97px
+
+Wrote 34 fits to fit_horizon_exact_results.json
