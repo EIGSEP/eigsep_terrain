@@ -457,7 +457,7 @@ numba = [
 [package.metadata]
 requires-dist = [
     { name = "arviz", marker = "extra == 'img'" },
-    { name = "healjax", git = "https://github.com/EIGSEP/healjax.git" },
+    { name = "healjax", directory = "../healjax" },
     { name = "healpy" },
     { name = "ipython", specifier = ">=9.13.0" },
     { name = "jax" },
@@ -644,11 +644,26 @@ wheels = [
 [[package]]
 name = "healjax"
 version = "0.2.2"
-source = { git = "https://github.com/EIGSEP/healjax.git#f7dcf116204b23476ce0d9f0cab9f9436733a826" }
+source = { directory = "../healjax" }
 dependencies = [
     { name = "jax" },
     { name = "numpy" },
 ]
+
+[package.metadata]
+requires-dist = [
+    { name = "astropy", marker = "extra == 'maps'" },
+    { name = "astropy", marker = "extra == 'test'" },
+    { name = "astropy-healpix", marker = "extra == 'test'" },
+    { name = "healpy", marker = "extra == 'maps'" },
+    { name = "healpy", marker = "extra == 'test'" },
+    { name = "jax" },
+    { name = "numpy" },
+    { name = "pytest", marker = "extra == 'test'" },
+    { name = "scipy", marker = "extra == 'maps'" },
+    { name = "scipy", marker = "extra == 'test'" },
+]
+provides-extras = ["maps", "test"]
 
 [[package]]
 name = "healpy"
