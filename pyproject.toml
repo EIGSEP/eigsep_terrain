@@ -22,9 +22,7 @@ dependencies = [
     "linsolve",
     "jax",
     "healpy",
-    # not on PyPI; install from the sibling checkout:
-    #     pip install -e ../healjax
-    "healjax",
+    "healjax>=0.2.3",
     "ipython>=9.13.0",
     "matplotlib>=3.10.9",
 ]
@@ -40,8 +38,8 @@ img = [
 numba = ["numba"]
 
 [tool.uv.sources]
-# healjax is not on PyPI; resolve it from the sibling checkout.
-# Non-editable: uv builds and installs it like any other wheel.
+# healjax is on PyPI; for local development resolve it from the sibling
+# checkout. Non-editable: uv builds and installs it like any other wheel.
 healjax = { path = "../healjax" }
 
 [tool.setuptools]
