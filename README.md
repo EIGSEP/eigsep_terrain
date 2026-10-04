@@ -50,7 +50,14 @@ compares terrain placement, local translations, survey elevations and
 azimuths. Its editable reference tables support field calibration and
 held-out checks; empty tables explicitly mark validation as pending.
 
+EXIF focal conversion uses the full image diagonal relative to a 36 × 24 mm
+frame, so portrait rotation preserves the inferred focal length in pixels.
+The supplied dimensions must retain the EXIF field of view; cropping needs
+a separate intrinsics transform.
+
 ## Recent changes
 
 - 2026-10-07: Aligned the executed UTM survey review with the published 3-by-4 Marjum DEM footprint and its source checksums, so the horizon preview uses the same terrain extent as v0002.
 - 2026-10-07: Reject pre-UTM caches before any rebuild, preserving pinned DEM products and requiring an explicit source footprint for replacements.
+- 2026-10-04: Corrected EXIF focal conversion for portrait images and non-3:2
+  image shapes; added shared conversion and rotation/resize checks.
