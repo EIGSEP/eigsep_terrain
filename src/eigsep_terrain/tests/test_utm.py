@@ -1,4 +1,5 @@
 """Georeferencing and true-north regression tests, without external data."""
+import hashlib
 import numpy as np
 import pytest
 from PIL import Image, TiffImagePlugin
@@ -42,20 +43,30 @@ def test_pixel_centres_roundtrip_mosaic_and_cache(tmp_path):
         dem.load_tif(bad)
 
 
-def test_legacy_cache_rebuild_and_marjum_arguments(tmp_path):
+def test_legacy_cache_requires_new_path_and_preserves_source(tmp_path):
     cache = tmp_path/'old.npz'
-    np.savez(cache, dem=np.zeros((4, 4)))
+    np.savez(cache, dem=np.zeros((4, 4)), files=np.array([['old.tif']]))
+    original_hash = hashlib.sha256(cache.read_bytes()).hexdigest()
     tif = tile(tmp_path/'tile.tif')
     xml = tmp_path/'tile.xml'
     xml.write_text('<metadata><idinfo><spdom><bounding>'
                    '<westbc>-113.4</westbc><eastbc>-113.3</eastbc>'
                    '<southbc>39.2</southbc><northbc>39.3</northbc>'
                    '</bounding></spdom></idinfo></metadata>')
-    with pytest.warns(UserWarning, match='legacy'):
-        dem = MarjumDEM(cache_file=cache, xml_file=xml,
-                        tif_files=np.array([[tif]]), survey_offset=[0, 0, 7])
+    for clear_cache in (False, True):
+        with pytest.raises(ValueError, match='build a new cache path'):
+            MarjumDEM(cache_file=cache, clear_cache=clear_cache,
+                      xml_file=xml, tif_files=np.array([[tif]]))
+        assert hashlib.sha256(cache.read_bytes()).hexdigest() == original_hash
+
+    new_cache = tmp_path/'new.npz'
+    dem = MarjumDEM(cache_file=new_cache, xml_file=xml,
+                    tif_files=np.array([[tif]]), survey_offset=[0, 0, 7])
     np.testing.assert_equal(dem.survey_offset, [0, 0, 7])
-    assert int(np.load(cache)['cache_version']) == 2
+    with np.load(new_cache) as saved:
+        assert int(saved['cache_version']) == 2
+        np.testing.assert_equal(saved['files'], [[tif]])
+    assert hashlib.sha256(cache.read_bytes()).hexdigest() == original_hash
 
 
 def test_true_horizon_sign_from_independent_geodesic():

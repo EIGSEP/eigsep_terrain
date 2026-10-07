@@ -29,8 +29,13 @@ Horizon bins hold conservative maxima over pixels touching each bin,
 not point samples. Prefer `n_az >= 1440` when interpolating a horizon,
 and record `azimuth_frame` alongside saved horizon/ray products.
 Previously saved horizons, camera fits and raster positions need
-recomputation; old DEM caches are ignored and Marjum rebuilds them from
-GeoTIFFs. Generic `DEM` callers must reload TIFFs after a legacy cache.
+recomputation. Pre-UTM DEM caches raise an error, including with
+`clear_cache=True`, so opening a pinned product cannot silently replace it.
+Build the UTM cache at a new path from the original GeoTIFF tile list. For
+Marjum `dem/v0001`, that list is 3 east by 4 north tiles; the package's
+default `get_tif_files()` selects a different 5-by-3 footprint. Verify the
+new cache's shape and elevation values against the old product before using
+it, and publish it as a new version with its own checksum.
 
 Marjum's default survey offset is now `[0, 0, 3]` metres. The previous
 horizontal correction `[-11, 36]` was established with the old coordinate
@@ -44,3 +49,7 @@ The executed [UTM Frame Survey Review notebook](notebooks/UTM%20Frame%20Survey%2
 compares terrain placement, local translations, survey elevations and
 azimuths. Its editable reference tables support field calibration and
 held-out checks; empty tables explicitly mark validation as pending.
+
+## Recent changes
+
+- 2026-10-07: Reject pre-UTM caches before any rebuild, preserving pinned DEM products and requiring an explicit source footprint for replacements.

@@ -6,7 +6,6 @@ import os
 import pyuvdata
 import xmltodict
 from pyproj import CRS, Proj, Transformer
-import warnings
 from .utils import az_bin, calc_az_bin_range, calc_rmin
 from .ray import ray_trace_basic, healpix_rays, calc_maxiter
 
@@ -25,30 +24,36 @@ class DEM(dict):
         self.e0_px = 0
         self.n0_px = 0
         if clear_cache and cache_file is not None and os.path.exists(cache_file):
+            # A pre-UTM cache may be a pinned data product. Never destroy it
+            # while changing coordinate conventions.
+            with np.load(cache_file) as npz:
+                self._require_current_cache(npz)
             os.remove(cache_file)
         if cache_file is not None and os.path.exists(cache_file):
             self.load_cache()
 
     def load_cache(self):
         '''Retrieve cached DEM data from npz file.'''
-        npz = np.load(self._cache_file)
-        if 'cache_version' not in npz or int(npz['cache_version']) != CACHE_VERSION:
-            warnings.warn('Ignoring legacy DEM cache; rebuild from GeoTIFFs.',
-                          UserWarning, stacklevel=2)
-            return
-        self._set_projection(int(npz['crs_epsg']))
-        self.raster_origin = npz['raster_origin']
-        self.files = npz['files']
-        self.res = npz['res']
-        self.data = npz['dem']
-        self.map_crd = {k: npz[k] for k in XML_CRD_KEYWORDS}
-        self.survey_offset = npz['survey_offset']
-        # e0_px/n0_px let the array grow (e.g. adding a tile to the south or
-        # west) without moving what e_m=0/n_m=0 already means to every
-        # existing caller -- absent in caches saved before this existed, so
-        # default to 0 (the previously-implicit, origin-at-row/col-0 behavior).
-        self.e0_px = int(npz['e0_px']) if 'e0_px' in npz.files else 0
-        self.n0_px = int(npz['n0_px']) if 'n0_px' in npz.files else 0
+        with np.load(self._cache_file) as npz:
+            self._require_current_cache(npz)
+            self._set_projection(int(npz['crs_epsg']))
+            self.raster_origin = npz['raster_origin']
+            self.files = npz['files']
+            self.res = npz['res']
+            self.data = npz['dem']
+            self.map_crd = {k: npz[k] for k in XML_CRD_KEYWORDS}
+            self.survey_offset = npz['survey_offset']
+            self.e0_px = int(npz['e0_px'])
+            self.n0_px = int(npz['n0_px'])
+
+    def _require_current_cache(self, npz):
+        if ('cache_version' not in npz
+                or int(npz['cache_version']) != CACHE_VERSION):
+            raise ValueError(
+                f'{self._cache_file} uses an incompatible DEM coordinate frame; '
+                'preserve it and build a new cache path from its exact source '
+                'GeoTIFF tile list.'
+            )
 
     def save_cache(self):
         '''Cache DEM data in npz file.'''
