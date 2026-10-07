@@ -35,7 +35,8 @@ def test_initial_pose_from_exif_orders_prms_correctly():
     assert d['ph'] == pytest.approx(0.0, abs=1e-6)
     assert d['th'] == pytest.approx(np.pi / 2)
     assert d['ti'] == pytest.approx(0.0)
-    assert d['f'] == pytest.approx(3028.6630713897507)
+    # 26 mm-equivalent scaled by the image diagonal over the 36 x 24 mm diagonal
+    assert d['f'] == pytest.approx(26.0 * np.hypot(4032, 3024) / np.hypot(36.0, 24.0))
 
 
 def test_initial_pose_from_exif_missing_heading_defaults_zero():
@@ -57,7 +58,8 @@ def test_focal_pixels_full_frame_and_rotation():
     assert focal_length_pixels(50., 3600, 2400) == pytest.approx(5000.)
     assert focal_length_pixels(50., 2400, 3600) == pytest.approx(5000.)
     # Actual portrait ultrawide dimensions previously produced 1176 px.
-    assert focal_length_pixels(14., 3024, 4032) == pytest.approx(1630.8185769021734)
+    assert focal_length_pixels(14., 3024, 4032) == pytest.approx(
+        14.0 * np.hypot(3024, 4032) / np.hypot(36.0, 24.0))
 
 
 def test_focal_pixels_array_rotation_and_resize():
