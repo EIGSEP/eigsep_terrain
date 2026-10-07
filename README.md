@@ -52,4 +52,5 @@ held-out checks; empty tables explicitly mark validation as pending.
 
 ## Recent changes
 
+- 2026-10-07: Aligned the executed UTM survey review with the published 3-by-4 Marjum DEM footprint and its source checksums, so the horizon preview uses the same terrain extent as v0002.
 - 2026-10-07: Reject pre-UTM caches before any rebuild, preserving pinned DEM products and requiring an explicit source footprint for replacements.
