@@ -5,6 +5,8 @@ import PIL.Image
 import os
 import pyuvdata
 import xmltodict
+from pyproj import CRS, Proj, Transformer
+import warnings
 from .utils import az_bin, calc_az_bin_range, calc_rmin
 from .ray import ray_trace_basic, healpix_rays, calc_maxiter
 
@@ -12,6 +14,7 @@ dtype_r = np.float32
 
 XML_CRD_KEYWORDS = ('eastbc', 'westbc', 'northbc', 'southbc')
 DEFAULT_BACKEND = 'numpy'
+CACHE_VERSION = 2
 
 class DEM(dict):
     '''Class for interacting with Digital Elevation Model data.'''
@@ -21,7 +24,7 @@ class DEM(dict):
         self.backend = backend
         self.e0_px = 0
         self.n0_px = 0
-        if clear_cache and os.path.exists(cache_file):
+        if clear_cache and cache_file is not None and os.path.exists(cache_file):
             os.remove(cache_file)
         if cache_file is not None and os.path.exists(cache_file):
             self.load_cache()
@@ -29,6 +32,12 @@ class DEM(dict):
     def load_cache(self):
         '''Retrieve cached DEM data from npz file.'''
         npz = np.load(self._cache_file)
+        if 'cache_version' not in npz or int(npz['cache_version']) != CACHE_VERSION:
+            warnings.warn('Ignoring legacy DEM cache; rebuild from GeoTIFFs.',
+                          UserWarning, stacklevel=2)
+            return
+        self._set_projection(int(npz['crs_epsg']))
+        self.raster_origin = npz['raster_origin']
         self.files = npz['files']
         self.res = npz['res']
         self.data = npz['dem']
@@ -44,31 +53,124 @@ class DEM(dict):
     def save_cache(self):
         '''Cache DEM data in npz file.'''
         if self._cache_file is not None:
-            np.savez(self._cache_file, dem=self.data, res=self.res,
+            np.savez(self._cache_file, cache_version=CACHE_VERSION,
+                     crs_epsg=self.crs.to_epsg(),
+                     raster_origin=self.raster_origin,
+                     dem=self.data, res=self.res,
                      files=self.files, survey_offset=self.survey_offset,
                      e0_px=self.e0_px, n0_px=self.n0_px,
                      **self.map_crd)
 
-    def load_tif(self, files, survey_offset=np.array([0, 0,0])):
-        # keep the source float32; int32 truncated every elevation to a whole
-        # metre, biasing the horizon low and quantizing it by atan(1 m / r)
-        _dem = np.hstack([np.vstack([np.array(PIL.Image.open(f),
-                                              dtype='float32')
-                                     for f in files[i][::-1]])
-                          for i in range(files.shape[0])])
+    def _set_projection(self, epsg):
+        self.crs = CRS.from_epsg(epsg)
+        if not self.crs.is_projected or self.crs.utm_zone is None:
+            raise ValueError('DEM requires a UTM projected CRS')
+        self._forward = Transformer.from_crs(
+            self.crs.geodetic_crs, self.crs, always_xy=True)
+        self._inverse = Transformer.from_crs(
+            self.crs, self.crs.geodetic_crs, always_xy=True)
+
+    def load_tif(self, files, survey_offset=(0, 0, 0)):
+        """Load a rectangular UTM mosaic (files indexed east, then north).
+
+        Coordinates refer to pixel centres. All tiles must share a CRS,
+        resolution, shape and contiguous north-up georeferencing.
+        """
+        files = np.asarray(files)
+        tiles = {}
+        for i, j in np.ndindex(files.shape):
+            with PIL.Image.open(files[i, j]) as image:
+                tags = image.tag_v2
+                tie = tags[33922]
+                sx, sy, _ = tags[33550]
+                keys = tags[34735]
+                geo = {keys[k]: tuple(keys[k+1:k+4])
+                       for k in range(4, len(keys), 4)}
+                epsg = geo[3072][2]
+                raster_type = geo.get(1025, (0, 1, 1))[2]
+                if 34264 in tags or sx <= 0 or sx != sy:
+                    raise ValueError('Expected square, north-up pixels')
+                if raster_type not in (1, 2):
+                    raise ValueError('Unsupported GeoTIFF raster type')
+                width, height = image.size
+                x = tie[3] - tie[0] * sx
+                y = tie[4] + tie[1] * sy
+                # PixelIsArea tiepoints describe edges; PixelIsPoint centres.
+                half = 0.5 if raster_type == 1 else 0.0
+                origin = np.array([x + half*sx,
+                                   y - (height-1+half)*sy])
+                if i == j == 0:
+                    self._set_projection(epsg)
+                    self.res = sx
+                    self.raster_origin = origin
+                    shape = (height, width)
+                expected = self.raster_origin + np.array(
+                    [i * width * sx, j * height * sy])
+                if (epsg != self.crs.to_epsg() or sx != self.res
+                        or (height, width) != shape
+                        or not np.allclose(origin, expected, rtol=0,
+                                           atol=1e-6)):
+                    raise ValueError('Tiles do not form a contiguous mosaic')
+                tiles[i, j] = np.flipud(np.array(image, dtype='float32'))
+        self.data = np.hstack([np.vstack([tiles[i, j]
+                              for j in range(files.shape[1])])
+                              for i in range(files.shape[0])])
         self.files = files
-        self.res = 1000 / 2000 # m / px
-        self.data = np.flipud(_dem)
-        self.survey_offset = survey_offset
+        self.e0_px = self.n0_px = 0
+        self.survey_offset = np.asarray(survey_offset, dtype=float)
+
+    def latlon_to_raster(self, lat, lon, alt=None, survey_offset=None):
+        """Geographic degrees to local UTM grid metres, with unchanged height.
+
+        Lat/lon use the raster's geographic datum (NAD83(2011) at Marjum).
+        WGS84 GPS coordinates need a separate datum correction (~1 m here).
+        Heights must already use the DEM vertical datum; no geoid conversion
+        is performed. The survey offset is subtracted from all three axes.
+        """
+        offset = self.survey_offset if survey_offset is None else survey_offset
+        e, n = self._forward.transform(float(lon), float(lat))
+        return np.array([e-self.raster_origin[0],
+                         n-self.raster_origin[1],
+                         0 if alt is None else float(alt)]) - offset
+
+    def raster_to_latlon(self, enu, survey_offset=None):
+        """Inverse of latlon_to_raster, returning degrees/degrees/metres."""
+        offset = self.survey_offset if survey_offset is None else survey_offset
+        e, n, u = np.asarray(enu) + offset
+        lon, lat = self._inverse.transform(
+            e+self.raster_origin[0], n+self.raster_origin[1])
+        return lat, lon, u
+
+    def grid_convergence(self, e, n):
+        """True minus grid azimuth in radians at a raster position."""
+        lat, lon, _ = self.raster_to_latlon([e, n, 0])
+        return np.deg2rad(Proj(self.crs).get_factors(
+            lon, lat).meridian_convergence)
+
+    def _azimuth_offset(self, e, n, frame):
+        if frame == 'grid':
+            return 0.0
+        if frame != 'true':
+            raise ValueError("azimuth_frame must be 'true' or 'grid'")
+        # Synthetic grids without georeferencing retain their local axes.
+        return self.grid_convergence(e, n) if hasattr(self, 'crs') else 0.0
 
     def load_xml(self, filename):
         with open(filename, 'rb') as f:
            self.map_crd = {k: np.deg2rad(float(v)) for k, v in
      xmltodict.parse(f)['metadata']['idinfo']['spdom']['bounding'].items()}
 
-    def latlon_to_enu(self, lat, lon, alt=None, survey_offset=None):
-        '''Convert lat/lon/[alt] deg/deg/[m] into east/north/up
-        coordinates in meters.'''
+    def latlon_to_enu(self, lat, lon, alt=None, survey_offset=None,
+                      frame="utm"):
+        """Convert degrees/degrees/metres to UTM raster coordinates.
+
+        frame='tangent' reproduces the historical tangent-plane conversion.
+        See latlon_to_raster for datum and height conventions.
+        """
+        if frame == "utm":
+            return self.latlon_to_raster(lat, lon, alt, survey_offset)
+        if frame != "tangent":
+            raise ValueError("frame must be utm or tangent")
         lat = np.deg2rad(float(lat))
         lon = np.deg2rad(float(lon))
         if alt is None:
@@ -84,8 +186,12 @@ class DEM(dict):
                 longitude=self.map_crd['westbc'], altitude=-alt)
         return enu - survey_offset
 
-    def enu_to_latlon(self, enu, survey_offset=None):
-        '''Convert east/north/up [m] coordinates to latitude/longitude/alt [deg/deg/m].'''
+    def enu_to_latlon(self, enu, survey_offset=None, frame="utm"):
+        """Inverse grid conversion; frame='tangent' uses the legacy frame."""
+        if frame == "utm":
+            return self.raster_to_latlon(enu, survey_offset)
+        if frame != "tangent":
+            raise ValueError("frame must be utm or tangent")
         alt = 0
         if survey_offset is None:
             survey_offset = self.survey_offset
@@ -242,27 +348,29 @@ class DEM(dict):
         if data is None:
             data = self.data
         answer = [(data, 1)]
-        # trim off remainders
-        r0 = data.shape[0] % factor
-        r1 = data.shape[1] % factor
-        data = data[:data.shape[0]-r0, :data.shape[1]-r1]
-        if data.shape[0] <= factor or data.shape[1] <= factor:
+        if max(data.shape) <= factor:
             return answer
-        data.shape = (data.shape[0] // factor, factor,
-                      data.shape[1] // factor, factor)
-        pool_data = np.max(data, axis=(1, 3))
-        if r1 > 0:
-            # pad out fractional pixel on boundary
-            pool_data = np.concatenate([pool_data,
-                            np.zeros_like(pool_data[:,:1])], axis=1)
-        if r0 > 0:
-            # pad out fractional pixel on boundary
-            pool_data = np.concatenate([pool_data, np.zeros_like(pool_data[:1])], axis=0)
+        # Preserve partial boundary blocks; zero padding loses tall terrain.
+        pad = tuple((0, (-size) % factor) for size in data.shape)
+        padded = np.pad(np.asarray(data, dtype=np.result_type(data.dtype, np.float32)), pad,
+                        constant_values=-np.inf)
+        blocks = padded.reshape(padded.shape[0] // factor, factor,
+                                padded.shape[1] // factor, factor)
+        pool_data = np.max(blocks, axis=(1, 3))
         answer += [(d, factor * f) for (d, f) in self.build_maxpool_pyramid(data=pool_data, factor=factor)]
         return answer
 
     def calc_horizon(self, e0, n0, u0, n_az=256, imp=None, f_prev=None,
-                     ei_off=None, ni_off=None, crds=None, hangles=None):
+                     ei_off=None, ni_off=None, crds=None, hangles=None,
+                     azimuth_frame="true", _az_offset=None):
+        """Return conservative bin maxima and their raster (north, east).
+
+        Each bin is the maximum over pixels touching its angular interval,
+        not a point sample. Use n_az >= 1440 for interpolated products.
+        True azimuth uses observer convergence; grid preserves legacy axes.
+        """
+        if _az_offset is None:
+            _az_offset = self._azimuth_offset(e0, n0, azimuth_frame)
         if imp is None:
             # top case
             imp = self.build_maxpool_pyramid()
@@ -282,7 +390,8 @@ class DEM(dict):
             U = _U[_ni:_ni + f_step, _ei:_ei + f_step]
     
         r_min = calc_rmin(e_edges, n_edges, e0, n0)
-        az_min, az_max = calc_az_bin_range(e_edges, n_edges, e0, n0, n_az)
+        az_min, az_max = calc_az_bin_range(e_edges, n_edges, e0, n0, n_az,
+                          az_offset=_az_offset)
         hor_ang = np.arctan2(U - u0, r_min)
         # process in order of maximum possible horizon angle first
         n_pxs, e_pxs = np.unravel_index(np.argsort(-hor_ang, axis=None), r_min.shape)
@@ -309,7 +418,9 @@ class DEM(dict):
                 hangles, crds = self.calc_horizon(e0, n0, u0,
                                         n_az=n_az, imp=imp[:-1], f_prev=f,
                                         ei_off=_ei+ei, ni_off=_ni+ni,
-                                        crds=crds, hangles=hangles)
+                                        crds=crds, hangles=hangles,
+                                        azimuth_frame=azimuth_frame,
+                                        _az_offset=_az_offset)
             else:
                 # can skip this pixel
                 pass
@@ -317,7 +428,7 @@ class DEM(dict):
 
     def ray_trace(self, start_point, nside, delta_r_m=1,
                   r_max=None, max_horizon_ang_deg=45, dtype=dtype_r,
-                  backend=None):
+                  backend=None, azimuth_frame="true"):
         '''Return the distance along a HealPix grid of specified nside from a
         ENU starting point until a ray intersects the terrain, in steps of
         delta_r_m [m], out to r_max (or map edge if None). Rays with elevation
@@ -325,11 +436,16 @@ class DEM(dict):
         and are returned as NaN. Returns distance [m] in HealPix order, with
         non-intersecting rays set to NaN.
 
+        azimuth_frame: 'true' (default) or 'grid'. True bearings are rotated
+        into raster axes at the observer before tracing.
         backend: 'numpy', 'numba', or 'jax'. Defaults to self.backend.'''
         if backend is None:
             backend = self.backend
         E, N = self.get_en()
         rays = healpix_rays(nside, dtype=dtype)
+        gamma = self._azimuth_offset(*start_point[:2], azimuth_frame)
+        c, s = np.cos(gamma), np.sin(gamma)
+        rays[:2] = np.array([[c, -s], [s, c]]) @ rays[:2]
         r_start = np.full(rays.shape[1], delta_r_m, dtype=dtype)
         if max_horizon_ang_deg is not None:
             above_horizon = rays[2] > np.sin(np.deg2rad(max_horizon_ang_deg))

@@ -49,7 +49,7 @@ python scripts/eigsep_terrain_pymc.py --help
 
 ### Key conventions
 
-- All spatial coordinates are **ENU in meters**, origin at `map_crd['southbc'], map_crd['westbc']` minus `survey_offset`.
+- DEM positions and camera/ray vectors use **UTM grid metres**, origin at the southwest raster pixel centre. Geographic conversions use TIFF georeferencing; `survey_offset` is subtracted from converted survey positions. Horizon and DEM HealPix ray azimuths default to true north.
 - `DEM.data` is indexed as `[n_px, e_px]` (row = north, col = east), with `(0,0)` at the south-west corner.
 - Camera parameters `PRM_ORDER = ('e', 'n', 'u', 'th', 'ph', 'ti', 'f')`: tilt `ti` is in-plane rotation around z-axis applied first, then elevation `th` around y-axis, then azimuth `ph` around z-axis.
 - `ray_trace_basic` accepts rays as `(3, N)` arrays; it does **not** accept HealPix nside directly — call `healpix_rays(nside)` first.
