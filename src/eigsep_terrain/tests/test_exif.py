@@ -2,7 +2,7 @@
 import numpy as np
 import pytest
 
-from eigsep_terrain.exif import _dms_to_decimal, initial_pose_from_exif
+from eigsep_terrain.exif import _dms_to_decimal, initial_pose_from_exif, focal_length_pixels
 from eigsep_terrain.img import PRM_ORDER
 
 
@@ -35,7 +35,8 @@ def test_initial_pose_from_exif_orders_prms_correctly():
     assert d['ph'] == pytest.approx(0.0, abs=1e-6)
     assert d['th'] == pytest.approx(np.pi / 2)
     assert d['ti'] == pytest.approx(0.0)
-    assert d['f'] == pytest.approx(4032 * 26.0 / 36.0)
+    # 26 mm-equivalent scaled by the image diagonal over the 36 x 24 mm diagonal
+    assert d['f'] == pytest.approx(26.0 * np.hypot(4032, 3024) / np.hypot(36.0, 24.0))
 
 
 def test_initial_pose_from_exif_missing_heading_defaults_zero():
@@ -50,3 +51,25 @@ def test_initial_pose_from_exif_missing_heading_defaults_zero():
 def test_initial_pose_from_exif_requires_gps():
     with pytest.raises(ValueError):
         initial_pose_from_exif(dict(lat=None, lon=None), _FakeDEM(), 100, 100)
+
+
+def test_focal_pixels_full_frame_and_rotation():
+    # A 36 x 24 mm frame sampled at 100 pixels/mm: 50 mm maps to 5000 px.
+    assert focal_length_pixels(50., 3600, 2400) == pytest.approx(5000.)
+    assert focal_length_pixels(50., 2400, 3600) == pytest.approx(5000.)
+    # Actual portrait ultrawide dimensions previously produced 1176 px.
+    assert focal_length_pixels(14., 3024, 4032) == pytest.approx(
+        14.0 * np.hypot(3024, 4032) / np.hypot(36.0, 24.0))
+
+
+def test_focal_pixels_array_rotation_and_resize():
+    f35=np.array([14.,26.,77.])
+    landscape=focal_length_pixels(f35,4032,3024)
+    np.testing.assert_allclose(focal_length_pixels(f35,3024,4032),landscape)
+    np.testing.assert_allclose(focal_length_pixels(f35,2016,1512),landscape/2)
+
+
+@pytest.mark.parametrize('values', [(0,4032,3024),(26,0,3024),(26,4032,-1),(np.nan,4032,3024)])
+def test_focal_pixels_rejects_invalid_metadata(values):
+    with pytest.raises(ValueError,match='finite and positive'):
+        focal_length_pixels(*values)

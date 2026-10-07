@@ -22,7 +22,27 @@ FOCAL_LENGTH_TAG = 37386  # mm, physical focal length
 FOCAL_LENGTH_35MM_TAG = 41989  # mm, 35mm-film-equivalent focal length
 DATETIME_ORIGINAL_TAG = 36867
 
-FULL_FRAME_WIDTH_MM = 36.0  # width of a 35mm film frame, for f_px conversion
+FULL_FRAME_WIDTH_MM = 36.0
+FULL_FRAME_DIAGONAL_MM = np.hypot(FULL_FRAME_WIDTH_MM, 24.0)
+
+
+def focal_length_pixels(focal_35mm, width_px, height_px):
+    """Convert 35 mm equivalent focal length using the full image diagonal.
+
+    CIPA DCG-001 defines equivalence by the diagonal ratio to a 36 x 24 mm
+    frame. This is invariant under a 90-degree image rotation and scales with
+    isotropic resizing. Dimensions must represent the EXIF field of view;
+    cropping or anisotropic resizing requires a separate intrinsics transform.
+    Scalar or broadcast-compatible array inputs are supported.
+    """
+    focal, width, height = np.broadcast_arrays(
+        np.asarray(focal_35mm, dtype=float),
+        np.asarray(width_px, dtype=float),
+        np.asarray(height_px, dtype=float),
+    )
+    if any(np.any(~np.isfinite(x) | (x <= 0)) for x in (focal, width, height)):
+        raise ValueError('focal length and image dimensions must be finite and positive')
+    return focal * np.hypot(width, height) / FULL_FRAME_DIAGONAL_MM
 
 
 def _dms_to_decimal(dms, ref):
@@ -99,7 +119,7 @@ def initial_pose_from_exif(exif, dem, npix_x, npix_y):
     ti = 0.0  # assume no in-plane roll
 
     if exif.get('focal_35mm') is not None:
-        f = npix_x * (exif['focal_35mm'] / FULL_FRAME_WIDTH_MM)
+        f = focal_length_pixels(exif['focal_35mm'], npix_x, npix_y)
     else:
         f = float(npix_x)  # crude fallback: roughly a 1x (36mm-equiv) lens
 

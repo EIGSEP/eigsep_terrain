@@ -47,16 +47,21 @@ def azimuth(a, b):
     '''Return azimuthal angle [rad] of B viewed from A, assuming ENU coordinates.'''
     return np.arctan2(b[0] - a[0], b[1] - a[1])
 
-def az_bin(e, n, n_az):
+def az_bin(e, n, n_az, az_offset=0):
     '''Calculate azimuthal angle and round to nearest bin.'''
-    az = np.arctan2(e[None, :], n[:, None])
+    az = (np.arctan2(e[None, :], n[:, None]) + az_offset) % (2*np.pi)
     az = np.where(az < 0, 2 * np.pi + az, az)
     b = np.around(az / (2 * np.pi / n_az)).astype(int)
-    return b
+    return b % n_az
     
-def calc_az_bin_range(e_edges, n_edges, e0, n0, n_az):
+def calc_az_bin_range(e_edges, n_edges, e0, n0, n_az, az_offset=0):
     '''Calculate the min/max az ranges a pixel could contain, based on
     where the pixel edges are.'''
+    bin_azimuth = az_bin
+
+    def shifted_bin(e, n, bins):
+        return bin_azimuth(e, n, bins, az_offset=az_offset)
+
     # (0, 0) is bottom-left
     # Letters are axis0: (t=top, m=middle, b=bottom),
     #             axis1: (l=left, c=center, r=right)
@@ -80,22 +85,22 @@ def calc_az_bin_range(e_edges, n_edges, e0, n0, n_az):
         r0, r1 = slice(0, -1), slice(1, None)
         if n0 > n_edges[-1]:
             # br case
-            ___a = az_bin(de_edges[r1], dn_edges[b1], n_az)
-            ___b = az_bin(de_edges[r0], dn_edges[b0], n_az)
+            ___a = shifted_bin(de_edges[r1], dn_edges[b1], n_az)
+            ___b = shifted_bin(de_edges[r0], dn_edges[b0], n_az)
         elif n0 >= n_edges[0]:
             # r case
-            b__a = az_bin(de_edges[r1], dn_edges[b1], n_az)
-            b__b = az_bin(de_edges[r0], dn_edges[b0], n_az)
-            m__a = az_bin(de_edges[r0], dn_edges[m1], n_az)
-            m__b = az_bin(de_edges[r0], dn_edges[m0], n_az)
-            t__a = az_bin(de_edges[r0], dn_edges[t1], n_az)
-            t__b = az_bin(de_edges[r1], dn_edges[t0], n_az)
+            b__a = shifted_bin(de_edges[r1], dn_edges[b1], n_az)
+            b__b = shifted_bin(de_edges[r0], dn_edges[b0], n_az)
+            m__a = shifted_bin(de_edges[r0], dn_edges[m1], n_az)
+            m__b = shifted_bin(de_edges[r0], dn_edges[m0], n_az)
+            t__a = shifted_bin(de_edges[r0], dn_edges[t1], n_az)
+            t__b = shifted_bin(de_edges[r1], dn_edges[t0], n_az)
             ___a = np.concatenate([b__a, m__a, t__a], axis=0)
             ___b = np.concatenate([b__b, m__b, t__b], axis=0)
         else:  # n0 < n_edges[0]
             # tr case
-            ___a = az_bin(de_edges[r0], dn_edges[t1], n_az)
-            ___b = az_bin(de_edges[r1], dn_edges[t0], n_az)
+            ___a = shifted_bin(de_edges[r0], dn_edges[t1], n_az)
+            ___b = shifted_bin(de_edges[r1], dn_edges[t0], n_az)
     elif e0 <= e_edges[-1]:
         e0_px = np.searchsorted(e_edges, e0) - 1
         l0, l1 = slice(0, e0_px+0), slice(1, e0_px+1)
@@ -103,23 +108,23 @@ def calc_az_bin_range(e_edges, n_edges, e0, n0, n_az):
         r0, r1 = slice(e0_px+1, -1), slice(e0_px+2, None)
         if n0 > n_edges[-1]:
             # bc case
-            ___a = np.concatenate([az_bin(de_edges[se], dn_edges[ne], n_az)
+            ___a = np.concatenate([shifted_bin(de_edges[se], dn_edges[ne], n_az)
                     for se, ne in zip([l1, c1, r1], [b0, b1, b1])], axis=1)
-            ___b = np.concatenate([az_bin(de_edges[se], dn_edges[ne], n_az)
+            ___b = np.concatenate([shifted_bin(de_edges[se], dn_edges[ne], n_az)
                     for se, ne in zip([l0, c0, r0], [b1, b1, b0])], axis=1)
         elif n0 >= n_edges[0]:
             # case
-            b__a = np.concatenate([az_bin(de_edges[se], dn_edges[ne], n_az)
+            b__a = np.concatenate([shifted_bin(de_edges[se], dn_edges[ne], n_az)
                     for se, ne in zip([l1, c1, r1], [b0, b1, b1])], axis=1)
-            b__b = np.concatenate([az_bin(de_edges[se], dn_edges[ne], n_az)
+            b__b = np.concatenate([shifted_bin(de_edges[se], dn_edges[ne], n_az)
                     for se, ne in zip([l0, c0, r0], [b1, b1, b0])], axis=1)
-            m__a = np.concatenate([az_bin(de_edges[se], dn_edges[ne], n_az)
+            m__a = np.concatenate([shifted_bin(de_edges[se], dn_edges[ne], n_az)
                     for se, ne in zip([l1, c1, r0], [m0, m0, m1])], axis=1)
-            m__b = np.concatenate([az_bin(de_edges[se], dn_edges[ne], n_az)
+            m__b = np.concatenate([shifted_bin(de_edges[se], dn_edges[ne], n_az)
                     for se, ne in zip([l1, c1, r0], [m1, m1, m0])], axis=1)
-            t__a = np.concatenate([az_bin(de_edges[se], dn_edges[ne], n_az)
+            t__a = np.concatenate([shifted_bin(de_edges[se], dn_edges[ne], n_az)
                     for se, ne in zip([l0, c0, r0], [t0, t0, t1])], axis=1)
-            t__b = np.concatenate([az_bin(de_edges[se], dn_edges[ne], n_az)
+            t__b = np.concatenate([shifted_bin(de_edges[se], dn_edges[ne], n_az)
                     for se, ne in zip([l1, c1, r1], [t1, t0, t0])], axis=1)
             ___a = np.concatenate([b__a, m__a, t__a], axis=0)
             ___b = np.concatenate([b__b, m__b, t__b], axis=0)
@@ -128,31 +133,31 @@ def calc_az_bin_range(e_edges, n_edges, e0, n0, n_az):
             ___b[n0_px, e0_px] = n_az - 1
         else:  # n0 < n_edges[0]
             # tc case
-            ___a = np.concatenate([az_bin(de_edges[se], dn_edges[ne], n_az)
+            ___a = np.concatenate([shifted_bin(de_edges[se], dn_edges[ne], n_az)
                     for se, ne in zip([l0, c0, r0], [t0, t0, t1])], axis=1)
-            ___b = np.concatenate([az_bin(de_edges[se], dn_edges[ne], n_az)
+            ___b = np.concatenate([shifted_bin(de_edges[se], dn_edges[ne], n_az)
                     for se, ne in zip([l1, c1, r1], [t1, t0, t0])], axis=1)
     else:  # e0 > e_edges[-1]
         # l case
         l0, l1 = slice(0, -1), slice(1, None)
         if n0 > n_edges[-1]:
             # bl case
-            ___a = az_bin(de_edges[l1], dn_edges[b0], n_az)
-            ___b = az_bin(de_edges[l0], dn_edges[b1], n_az)
+            ___a = shifted_bin(de_edges[l1], dn_edges[b0], n_az)
+            ___b = shifted_bin(de_edges[l0], dn_edges[b1], n_az)
         elif n0 >= n_edges[0]:
             # l case
-            b__a = az_bin(de_edges[l1], dn_edges[b0], n_az)
-            b__b = az_bin(de_edges[l0], dn_edges[b1], n_az)
-            m__a = az_bin(de_edges[l1], dn_edges[m0], n_az)
-            m__b = az_bin(de_edges[l1], dn_edges[m1], n_az)
-            t__a = az_bin(de_edges[l0], dn_edges[t0], n_az)
-            t__b = az_bin(de_edges[l1], dn_edges[t1], n_az)
+            b__a = shifted_bin(de_edges[l1], dn_edges[b0], n_az)
+            b__b = shifted_bin(de_edges[l0], dn_edges[b1], n_az)
+            m__a = shifted_bin(de_edges[l1], dn_edges[m0], n_az)
+            m__b = shifted_bin(de_edges[l1], dn_edges[m1], n_az)
+            t__a = shifted_bin(de_edges[l0], dn_edges[t0], n_az)
+            t__b = shifted_bin(de_edges[l1], dn_edges[t1], n_az)
             ___a = np.concatenate([b__a, m__a, t__a], axis=0)
             ___b = np.concatenate([b__b, m__b, t__b], axis=0)
         else:  # n0 < n_edges[0]
             # tl case
-            ___a = az_bin(de_edges[l0], dn_edges[t0], n_az)
-            ___b = az_bin(de_edges[l1], dn_edges[t1], n_az)
+            ___a = shifted_bin(de_edges[l0], dn_edges[t0], n_az)
+            ___b = shifted_bin(de_edges[l1], dn_edges[t1], n_az)
             
     return ___a, ___b
     

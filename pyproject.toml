@@ -18,6 +18,7 @@ dependencies = [
     "Pillow",
     "pillow-heif",
     "pyuvdata",
+    "pyproj>=3.6",
     "tqdm",
     "linsolve",
     "jax",

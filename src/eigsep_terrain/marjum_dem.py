@@ -7,7 +7,9 @@ from .data import DATA_PATH
 from .dem import DEM
 from .dem import DEFAULT_BACKEND
 
-SURVEY_OFFSET = np.array([-11, 36, 3])
+LEGACY_SURVEY_OFFSET = np.array([-11, 36, 3])
+# Horizontal correction included the old frame error; recalibration pending.
+SURVEY_OFFSET = np.array([0, 0, 3])
 
 #USGS_OPR_UT_WestEast_B22_12STJ%04d.tif'
 
@@ -47,9 +49,11 @@ class MarjumDEM(DEM):
                  survey_offset=SURVEY_OFFSET, verbose=True, backend=DEFAULT_BACKEND):
         DEM.__init__(self, cache_file=cache_file, clear_cache=clear_cache,
                      backend=backend)
-        if self._cache_file == None or not os.path.exists(self._cache_file):
-            xml_file = get_xml_file(verbose=verbose)
-            tif_files = get_tif_files(verbose=verbose)
+        if not hasattr(self, "data"):
+            if xml_file is None:
+                xml_file = get_xml_file(verbose=verbose)
+            if tif_files is None:
+                tif_files = get_tif_files(verbose=verbose)
             self.load_xml(xml_file)
-            self.load_tif(tif_files, survey_offset=SURVEY_OFFSET)
+            self.load_tif(tif_files, survey_offset=survey_offset)
             self.save_cache()
