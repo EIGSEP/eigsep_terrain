@@ -33,8 +33,14 @@ recomputation; old DEM caches are ignored and Marjum rebuilds them from
 GeoTIFFs. Generic `DEM` callers must reload TIFFs after a legacy cache.
 
 Marjum's default survey offset is now `[0, 0, 3]` metres. The previous
-horizontal correction `[-11, 36]` absorbed the faulty coordinate frame
-and must be recalibrated from GPS benchmarks. The vertical correction
-is retained. `LEGACY_SURVEY_OFFSET` preserves the previous value for
+horizontal correction `[-11, 36]` was established with the old coordinate
+conversion. The new zero horizontal default is provisional pending
+validation against independently identified survey features. The vertical
+correction is retained. `LEGACY_SURVEY_OFFSET` preserves the previous value for
 explicit reproduction of old results. No new benchmark calibration is
 claimed by this change.
+
+The executed [UTM Frame Survey Review notebook](notebooks/UTM%20Frame%20Survey%20Review.ipynb)
+compares terrain placement, local translations, survey elevations and
+azimuths. Its editable reference tables support field calibration and
+held-out checks; empty tables explicitly mark validation as pending.
