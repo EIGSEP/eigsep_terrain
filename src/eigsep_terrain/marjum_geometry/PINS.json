@@ -1,0 +1,31 @@
+{
+  "description": "Frozen model sources pinned by marjum-2026-07/derived/geometry_posterior/v0004/input_manifest.json. Each file here is byte-identical to the recorded legacy path.",
+  "legacy_repo": "terrain/ (EIGSEP workspace checkout, no remote), commit ddd07c7",
+  "files": [
+    {
+      "legacy_path": "terrain/marjum_mcmc_b21.py",
+      "path": "eigsep_terrain/src/eigsep_terrain/marjum_geometry/marjum_mcmc_b21.py",
+      "sha256": "811ae1a98515b69da3d831c1f42370a5ec4a2f04c9eb07a3e69876ea9bbad3f6"
+    },
+    {
+      "legacy_path": "terrain/marjum_mcmc.py",
+      "path": "eigsep_terrain/src/eigsep_terrain/marjum_geometry/marjum_mcmc.py",
+      "sha256": "3df085308ca8628b3317be921e21b7c53f1925f3649214310e04c70f0a599e57"
+    },
+    {
+      "legacy_path": "terrain/marjum_bundle.py",
+      "path": "eigsep_terrain/src/eigsep_terrain/marjum_geometry/marjum_bundle.py",
+      "sha256": "ac6c9adf8b62df648f146831cc208b6c4c7fcc5cb8187a6c0c4d2508957860ab"
+    },
+    {
+      "legacy_path": "terrain/marjum_camera.py",
+      "path": "eigsep_terrain/src/eigsep_terrain/marjum_geometry/marjum_camera.py",
+      "sha256": "9f28c10fb553d5f9564d2ecd2e002b81add0880327aea11058afbe7a48708fc2"
+    },
+    {
+      "legacy_path": "terrain/marjum_fitio.py",
+      "path": "eigsep_terrain/src/eigsep_terrain/marjum_geometry/marjum_fitio.py",
+      "sha256": "6f4e5a0127bfbe6ae62a6221097d0c13a5fb1503692505376bca34d5a075b79a"
+    }
+  ]
+}
