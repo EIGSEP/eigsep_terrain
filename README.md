@@ -57,6 +57,7 @@ a separate intrinsics transform.
 
 ## Recent changes
 
+- 2026-10-08: Added `src/eigsep_terrain/marjum_geometry/`, byte-identical copies of the five Marjum camera/bundle/MCMC model files that geometry posterior v0004 pins, so that release stays reproducible once the old `terrain/` checkout is retired. They are frozen scripts, not importable modules yet.
 - 2026-10-07: Aligned the executed UTM survey review with the published 3-by-4 Marjum DEM footprint and its source checksums, so the horizon preview uses the same terrain extent as v0002.
 - 2026-10-07: Reject pre-UTM caches before any rebuild, preserving pinned DEM products and requiring an explicit source footprint for replacements.
 - 2026-10-04: Corrected EXIF focal conversion for portrait images and non-3:2
